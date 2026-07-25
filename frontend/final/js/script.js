@@ -12,10 +12,10 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ---------------------------------------------------------
      Backend Configuration
   --------------------------------------------------------- */
-  // Dynamically points to local server or relative path when hosted live on Render
-  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-  var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
-  var DEMO_MODE = true; // Change to false for official launch!
+  // Dynamically points to local server or relative path when hosted live on Render / Vercel
+  var isLocalOrFile = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.protocol === "file:";
+  var BACKEND_URL = isLocalOrFile ? "http://localhost:3000" : ""; 
+  var DEMO_MODE = false; // Set to false for live customer production mode!
 
   /* ---------------------------------------------------------
      Element references

@@ -1,0 +1,22 @@
+# Dependency directories
+node_modules/
+**/node_modules/
+
+# Environment variables & private keys
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# System logs & OS junk
+.DS_Store
+Thumbs.db
+__MACOSX/
+*.log
+npm-debug.log*
+
+# Vercel & build directories
+.vercel/
+dist/
+build/

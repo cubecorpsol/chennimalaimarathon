@@ -5,6 +5,8 @@ process.on("uncaughtException", (err) => {
   console.error("🔥 UNCAUGHT EXCEPTION:", err);
 });
 
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -17,6 +19,7 @@ const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "../../../frontend/final")));
 
 const mutex = new Mutex();
 
@@ -181,7 +184,10 @@ app.post("/api/register-demo", async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => res.send("Chennimalai Marathon backend is active."));
+app.get("/api", (req, res) => res.send("Chennimalai Marathon backend API is active."));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+module.exports = app;
