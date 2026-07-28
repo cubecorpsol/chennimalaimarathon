@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const { Settings, Registration } = require("../db");
 const sheets = require("./sheetsService");
+const payuService = require("./payuService");
 
 const isDryRun = () => process.env.DRY_RUN_MODE === "true";
 const isDemo = () => process.env.DEMO_MODE === "true";
@@ -26,12 +27,13 @@ function calculateAge(dobStr) {
   return age;
 }
 
-// 1. Create Razorpay Order with backend pricing calculation & MongoDB persistence
+// 1. Create Order with backend pricing calculation & MongoDB persistence (Supports Razorpay & PayU)
 async function createOrder(req, res) {
   try {
     const settings = await Settings.findOne() || {
       adultFee: 500, kidsFee: 300, tshirtPrice: 200,
-      maxRegistrations: 1000, isOpen: true, ageCutoff: 13
+      maxRegistrations: 1000, isOpen: true, ageCutoff: 13,
+      paymentGateway: "razorpay"
     };
 
     // Check total successful registrations count in MongoDB
@@ -67,7 +69,93 @@ async function createOrder(req, res) {
     const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
     const totalAmount = registrationFee + tshirtFee;
 
-    // Create Razorpay Order
+    const activeGateway = settings.paymentGateway || "razorpay";
+
+    if (activeGateway === "payu") {
+      const payuTxnId = `PAYU_TXN_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const { key, salt, actionUrl } = payuService.getPayuCredentials();
+
+      const hostUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
+      const callbackUrl = `${hostUrl}/api/payu/callback`;
+
+      const firstname = (formData.fullName || "Runner").trim().split(" ")[0] || "Runner";
+      const amountStr = totalAmount.toFixed(2);
+      const productinfo = "Chennimalai Marathon 2026 Registration";
+      const udf1 = "chennimalai_marathon";
+
+      const hash = payuService.generatePayuRequestHash({
+        key,
+        txnid: payuTxnId,
+        amount: amountStr,
+        productinfo,
+        firstname,
+        email: emailLower,
+        udf1,
+        salt
+      });
+
+      const regDoc = await Registration.create({
+        fullName: formData.fullName || "",
+        dob: formData.dob || "",
+        age,
+        participantType,
+        category,
+        gender: formData.gender || "others",
+        phone: formData.phone || "",
+        email: emailLower,
+        district: formData.district || "",
+        pincode: formData.pincode || "",
+        tshirtSize: formData.tshirtSize || "M",
+        tshirtSelected,
+        bloodGroup: formData.bloodGroup || "O+",
+        emergencyContact: formData.emergencyContact || "",
+        registrationFee,
+        tshirtFee,
+        totalAmount,
+        paymentStatus: "Pending",
+        paymentGateway: "payu",
+        payuTxnId: payuTxnId,
+        failureReason: `PayU order created (${payuTxnId}), payment pending`
+      });
+
+      sheets.appendRegistrationStatus({
+        timestamp: new Date().toISOString(),
+        fullName: regDoc.fullName, dob: regDoc.dob, age: regDoc.age,
+        participantType: regDoc.participantType, category: regDoc.category,
+        gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
+        district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
+        tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
+        tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
+        registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
+        status: "PENDING", failureReason: regDoc.failureReason
+      }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
+
+      return res.json({
+        success: true,
+        gateway: "payu",
+        action: actionUrl,
+        payuParams: {
+          key,
+          txnid: payuTxnId,
+          amount: amountStr,
+          productinfo,
+          firstname,
+          email: emailLower,
+          phone: formData.phone || "",
+          surl: callbackUrl,
+          furl: callbackUrl,
+          hash,
+          udf1
+        },
+        totalAmount,
+        registrationFee,
+        tshirtFee,
+        participantType,
+        category
+      });
+    }
+
+    // Default: Razorpay Order Creation
     let orderId = `order_demo_${Date.now()}`;
     let amountPaise = totalAmount * 100;
 
@@ -101,6 +189,7 @@ async function createOrder(req, res) {
       tshirtFee,
       totalAmount,
       paymentStatus: "Pending",
+      paymentGateway: "razorpay",
       razorpayOrderId: orderId,
       failureReason: `Order created (${orderId}), payment pending`
     });
@@ -120,6 +209,7 @@ async function createOrder(req, res) {
 
     return res.json({
       success: true,
+      gateway: "razorpay",
       orderId,
       amount: amountPaise,
       currency: "INR",

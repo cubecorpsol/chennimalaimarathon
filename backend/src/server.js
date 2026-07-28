@@ -14,6 +14,7 @@ const { Mutex } = require("async-mutex");
 const { connectDB, Settings, Registration, AdminUser } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
+const payuService = require("./services/payuService");
 const razorpayService = require("./services/razorpayService");
 const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
 
@@ -23,6 +24,7 @@ const mutex = new Mutex();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Initialize MongoDB Connection on Startup
 connectDB();
@@ -53,7 +55,7 @@ app.get("/api/status", async (req, res) => {
   try {
     const settings = await Settings.findOne() || {
       adultFee: 500, kidsFee: 300, tshirtPrice: 200, pricingTitle: "Marathon Registration Fees",
-      maxRegistrations: 1000, isOpen: true, showRemainingSlots: true
+      maxRegistrations: 1000, isOpen: true, showRemainingSlots: true, paymentGateway: "razorpay"
     };
 
     const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
@@ -70,6 +72,7 @@ app.get("/api/status", async (req, res) => {
       kidsFee: settings.kidsFee,
       tshirtPrice: settings.tshirtPrice,
       pricingTitle: settings.pricingTitle,
+      paymentGateway: settings.paymentGateway || "razorpay",
       demoMode: process.env.DEMO_MODE === "true",
       dryRunMode: process.env.DRY_RUN_MODE === "true"
     });
@@ -79,10 +82,120 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-// Razorpay Order Creation & Handlers
+// Payment Gateway Order Creation & Handlers
 app.post("/api/create-order", razorpayService.createOrder);
 app.post("/api/payment-pending", razorpayService.handlePaymentPending);
 app.post("/api/payment-failed", razorpayService.handlePaymentFailure);
+
+// PayU Callback Route (HTTP POST Redirect from PayU Hosted Checkout)
+app.post("/api/payu/callback", async (req, res) => {
+  const release = await mutex.acquire();
+  try {
+    const data = req.body || {};
+    const { salt } = payuService.getPayuCredentials();
+    const isValidHash = payuService.verifyPayuResponseHash(data, salt);
+
+    const txnid = data.txnid || "";
+    const mihpayid = data.mihpayid || "";
+    const status = String(data.status || "").toLowerCase();
+    const errorMsg = data.error_Message || data.unmappedstatus || "Transaction declined";
+
+    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+
+    if (!isValidHash && !razorpayService.isDryRun() && !razorpayService.isDemo()) {
+      console.error("PAYU_CALLBACK_HASH_INVALID:", data);
+      if (txnid) {
+        await Registration.findOneAndUpdate(
+          { payuTxnId: txnid },
+          { paymentStatus: "Failed", failureReason: "PayU callback hash signature verification failed" }
+        );
+      }
+      return res.redirect(`${frontendUrl}/register.html?status=failed&reason=${encodeURIComponent("Security signature verification failed")}`);
+    }
+
+    if (status === "success") {
+      let regRecord = await Registration.findOne({ payuTxnId: txnid });
+      const settings = await Settings.findOne() || { tshirtCounter: 11, maxRegistrations: 1000 };
+
+      if (!regRecord) {
+        const updatedSettings = await Settings.findOneAndUpdate(
+          {},
+          { $inc: { tshirtCounter: 1 } },
+          { new: true, upsert: true }
+        );
+        const tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
+
+        regRecord = await Registration.create({
+          fullName: data.firstname || "Runner",
+          dob: "01/01/2000", age: 20, participantType: "Adult", category: "7 KM Timed Run",
+          gender: "others", phone: data.phone || "0000000000",
+          email: String(data.email || "").trim().toLowerCase(),
+          district: "Erode", pincode: "638051", tshirtSize: "M", tshirtSelected: true,
+          bloodGroup: "O+", emergencyContact: "0000000000", tshirtNumber,
+          paymentStatus: "Success", paymentGateway: "payu", payuTxnId: txnid, payuMihpayid: mihpayid,
+          paymentGatewayResponse: data, failureReason: "Payment Successful"
+        });
+      } else if (regRecord.paymentStatus !== "Success") {
+        const updatedSettings = await Settings.findOneAndUpdate(
+          {},
+          { $inc: { tshirtCounter: 1 } },
+          { new: true, upsert: true }
+        );
+        const tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
+
+        regRecord.paymentStatus = "Success";
+        regRecord.tshirtNumber = tshirtNumber;
+        regRecord.payuMihpayid = mihpayid;
+        regRecord.paymentGatewayResponse = data;
+        regRecord.failureReason = "Payment Successful";
+        regRecord.updatedAt = new Date();
+        await regRecord.save();
+      }
+
+      const newSuccessCount = await Registration.countDocuments({ paymentStatus: "Success" });
+      if (newSuccessCount >= settings.maxRegistrations) {
+        await Settings.updateOne({}, { isOpen: false });
+      }
+
+      const sheetData = {
+        timestamp: regRecord.createdAt.toISOString(),
+        fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
+        participantType: regRecord.participantType, category: regRecord.category,
+        gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
+        district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
+        tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
+        tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
+        registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
+        totalAmount: regRecord.totalAmount, status: "SUCCESS",
+        failureReason: `PayU ID: ${mihpayid || txnid}`
+      };
+
+      sheets.appendRegistrationSuccess(sheetData).catch(() => {});
+      sheets.appendRegistrationStatus(sheetData).catch(() => {});
+
+      try {
+        await emailService.sendRegistrationEmail(regRecord, razorpayService.isDemo());
+      } catch (e) {
+        console.error("PAYU_EMAIL_SEND_FAILED", e.message);
+      }
+
+      return res.redirect(`${frontendUrl}/register.html?status=success&txnid=${txnid}&bib=${regRecord.tshirtNumber}&name=${encodeURIComponent(regRecord.fullName)}`);
+    } else {
+      if (txnid) {
+        await Registration.findOneAndUpdate(
+          { payuTxnId: txnid },
+          { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg }
+        );
+      }
+      return res.redirect(`${frontendUrl}/register.html?status=failed&reason=${encodeURIComponent(errorMsg)}`);
+    }
+  } catch (err) {
+    console.error("PAYU_CALLBACK_ERROR", err);
+    return res.status(500).send("Internal Server Error handling PayU payment status");
+  } finally {
+    release();
+  }
+});
 
 // Main Public Registration Verification Endpoint
 app.post("/api/register", async (req, res) => {

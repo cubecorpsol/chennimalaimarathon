@@ -578,6 +578,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // Handle PayU Hosted Checkout Return Status in URL Query Parameters
+  (function checkReturnPaymentStatus() {
+    if (typeof window === 'undefined' || !window.location) return;
+    var urlParams = new URLSearchParams(window.location.search);
+    var statusParam = urlParams.get('status');
+
+    if (statusParam === 'success') {
+      goToStep('step-success');
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } else if (statusParam === 'failed') {
+      var reason = urlParams.get('reason') || 'Transaction declined';
+      alert('Payment failed: ' + reason);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  })();
+
   if (continueBtn) {
     continueBtn.addEventListener('click', function () {
       if (validateStep1()) {
@@ -685,6 +705,28 @@ document.addEventListener('DOMContentLoaded', function () {
         alert(orderData.message || "Failed to initialize payment.");
         registerBtn.disabled = false;
         registerBtn.textContent = originalText;
+        return;
+      }
+
+      // PayU Hosted Checkout Form POST Redirect
+      if (orderData.gateway === "payu" && orderData.payuParams) {
+        var form = document.createElement("form");
+        form.method = "POST";
+        form.action = orderData.action;
+
+        var params = orderData.payuParams;
+        for (var pKey in params) {
+          if (Object.prototype.hasOwnProperty.call(params, pKey)) {
+            var hiddenField = document.createElement("input");
+            hiddenField.type = "hidden";
+            hiddenField.name = pKey;
+            hiddenField.value = params[pKey];
+            form.appendChild(hiddenField);
+          }
+        }
+
+        document.body.appendChild(form);
+        form.submit();
         return;
       }
 

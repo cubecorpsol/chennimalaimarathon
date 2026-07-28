@@ -10,7 +10,8 @@ const SettingsSchema = new mongoose.Schema({
   tshirtCounter: { type: Number, default: 11 },
   isOpen: { type: Boolean, default: true },
   showRemainingSlots: { type: Boolean, default: true },
-  ageCutoff: { type: Number, default: 13 }
+  ageCutoff: { type: Number, default: 13 },
+  paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" }
 }, { timestamps: true });
 
 const RegistrationSchema = new mongoose.Schema({
@@ -38,9 +39,12 @@ const RegistrationSchema = new mongoose.Schema({
     default: "Pending",
     index: true
   },
+  paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" },
   razorpayOrderId: { type: String, default: "" },
   razorpayPaymentId: { type: String, default: "" },
   razorpaySignature: { type: String, default: "" },
+  payuTxnId: { type: String, default: "" },
+  payuMihpayid: { type: String, default: "" },
   paymentGatewayResponse: { type: mongoose.Schema.Types.Mixed, default: {} },
   failureReason: { type: String, default: "" }
 }, { timestamps: true });
