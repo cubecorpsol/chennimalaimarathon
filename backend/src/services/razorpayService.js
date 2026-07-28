@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
-const sheets = require("../sheetsService");
+const sheets = require("./sheetsService");
 const { RULES } = require("../config");
 
 // Read modes directly from .env dynamically

@@ -2,17 +2,15 @@ process.on("unhandledRejection", (reason) => console.error("UNHANDLED CRASH REAS
 process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
 
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") });
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
-require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 const { Mutex } = require("async-mutex");
-const sheets = require("./sheetsService");
-const email = require("./emailService");
-const razorpayApi = require("./api/razorpayApi");
+const sheets = require("./services/sheetsService");
+const email = require("./services/emailService");
+const razorpayService = require("./services/razorpayService");
 const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
 
 const app = express();
@@ -73,9 +71,9 @@ app.get("/api/status", async (req, res) => {
 });
 
 // Razorpay Handlers
-app.post("/api/create-order", razorpayApi.createOrder);
-app.post("/api/payment-pending", razorpayApi.handlePaymentPending);
-app.post("/api/payment-failed", razorpayApi.handlePaymentFailure);
+app.post("/api/create-order", razorpayService.createOrder);
+app.post("/api/payment-pending", razorpayService.handlePaymentPending);
+app.post("/api/payment-failed", razorpayService.handlePaymentFailure);
 
 // Main Registration Endpoint
 app.post("/api/register", async (req, res) => {

@@ -1,5 +1,5 @@
 const { google } = require("googleapis");
-const { RULES } = require("./config");
+const { RULES } = require("../config");
 
 function getSpreadsheetId() {
   const id = process.env.GOOGLE_SHEET_ID;

@@ -5,14 +5,21 @@ async function createTransporter() {
   const meta = await sheets.getMeta();
   const useAccount1 = (meta.emailAccount1S || 0) <= (meta.emailAccount2S || 0);
 
+  const account1User = process.env.SMTP_USER_1 || process.env.GMAIL_ACCOUNT_1;
+  const account1Pass = process.env.SMTP_PASS_1 || process.env.GMAIL_APP_PASSWORD_1;
+  const account2User = process.env.SMTP_USER_2 || process.env.GMAIL_ACCOUNT_2;
+  const account2Pass = process.env.SMTP_PASS_2 || process.env.GMAIL_APP_PASSWORD_2;
+
   const account = useAccount1
-    ? { user: process.env.GMAIL_ACCOUNT_1, pass: process.env.GMAIL_APP_PASSWORD_1, num: 1 }
-    : { user: process.env.GMAIL_ACCOUNT_2, pass: process.env.GMAIL_APP_PASSWORD_2, num: 2 };
+    ? { user: account1User, pass: account1Pass, num: 1 }
+    : { user: account2User, pass: account2Pass, num: 2 };
 
   if (!account.user || !account.pass) return null;
 
   const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com", port: 587, secure: false,
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587", 10),
+    secure: false,
     auth: { user: account.user, pass: account.pass }
   });
 
