@@ -7,34 +7,30 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
+
+const { connectDB, Settings, Registration, AdminUser } = require("./db");
 const sheets = require("./services/sheetsService");
-const email = require("./services/emailService");
+const emailService = require("./services/emailService");
 const razorpayService = require("./services/razorpayService");
 const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
+
+const JWT_SECRET = process.env.JWT_SECRET || "chennimalai_marathon_secret_jwt_key_2026";
+const mutex = new Mutex();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serves static frontend files
+// Initialize MongoDB Connection on Startup
+connectDB();
+
+// Serve Static Frontend Files
 app.use(express.static(path.join(__dirname, "../../frontend")));
 
-const mutex = new Mutex();
-
-function calculateAge(dobStr) {
-  const parts = dobStr.split(/[\/\-]/).map(Number);
-  const [dd, mm, yyyy] = parts;
-  const dob = new Date(yyyy, mm - 1, dd);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const hasHadBirthday =
-    today.getMonth() > dob.getMonth() ||
-    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
-  if (!hasHadBirthday) age--;
-  return age;
-}
-
+// Helper function to validate fields
 function validate(data) {
   const required = [
     "fullName", "dob", "phone", "email", "district",
@@ -46,74 +42,78 @@ function validate(data) {
   return null;
 }
 
+
 // Metadata Routes
 app.get("/api/districts", (req, res) => res.json(DISTRICTS));
 app.get("/api/blood-groups", (req, res) => res.json(BLOOD_GROUPS));
 app.get("/api/tshirt-sizes", (req, res) => res.json(TSHIRT_SIZES));
 
-// Status Endpoint Syncs .env Modes to Frontend Dynamically
+// Public Status Endpoint - Dynamics Settings from MongoDB
 app.get("/api/status", async (req, res) => {
   try {
-    const meta = await sheets.getMeta();
-    const isClosed = meta.closed || meta.registrationCount >= RULES.MAX_REGISTRATIONS;
+    const settings = await Settings.findOne() || {
+      adultFee: 500, kidsFee: 300, tshirtPrice: 200, pricingTitle: "Marathon Registration Fees",
+      maxRegistrations: 1000, isOpen: true, showRemainingSlots: true
+    };
+
+    const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
+    const isClosed = !settings.isOpen || successCount >= settings.maxRegistrations;
+
     res.json({
       closed: isClosed,
-      registeredSoFar: meta.registrationCount,
-      maxRegistrations: RULES.MAX_REGISTRATIONS,
-      currentSlot: RULES.TSHIRT_NUMBER_START + meta.registrationCount,
+      isOpen: settings.isOpen,
+      registeredSoFar: successCount,
+      maxRegistrations: settings.maxRegistrations,
+      remainingSlots: Math.max(0, settings.maxRegistrations - successCount),
+      showRemainingSlots: settings.showRemainingSlots,
+      adultFee: settings.adultFee,
+      kidsFee: settings.kidsFee,
+      tshirtPrice: settings.tshirtPrice,
+      pricingTitle: settings.pricingTitle,
       demoMode: process.env.DEMO_MODE === "true",
       dryRunMode: process.env.DRY_RUN_MODE === "true"
     });
   } catch (err) {
     console.error("STATUS_ERROR", err);
-    res.status(500).json({ error: "SERVER_ERROR" });
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });
 
-// Razorpay Handlers
+// Razorpay Order Creation & Handlers
 app.post("/api/create-order", razorpayService.createOrder);
 app.post("/api/payment-pending", razorpayService.handlePaymentPending);
 app.post("/api/payment-failed", razorpayService.handlePaymentFailure);
 
-// Main Registration Endpoint
+// Main Public Registration Verification Endpoint
 app.post("/api/register", async (req, res) => {
   const release = await mutex.acquire();
   try {
-    const meta = await sheets.getMeta();
-    if (meta.closed || meta.registrationCount >= RULES.MAX_REGISTRATIONS) {
-      if (!meta.closed) await sheets.setClosed(true);
+    const data = req.body || {};
+    const settings = await Settings.findOne() || { maxRegistrations: 1000, isOpen: true, tshirtCounter: 11 };
+    const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
+
+    if (!settings.isOpen || successCount >= settings.maxRegistrations) {
       return res.status(403).json({
         error: "REGISTRATIONS_CLOSED",
-        message: "Registrations are closed. All 1,000 slots have been filled."
+        message: "Registrations are closed. All slots have been filled."
       });
     }
 
-    const data = req.body || {};
     const missingField = validate(data);
     if (missingField) return res.status(400).json({ error: "MISSING_FIELD", field: missingField });
 
-    const emailLower = String(data.email).trim().toLowerCase();
-    const age = calculateAge(data.dob);
-    const category = age <= RULES.AGE_CUTOFF_YEARS ? RULES.CATEGORY_3_5KM : RULES.CATEGORY_7KM;
-
-    // Verify HMAC Payment Signature
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
-    const isValid = razorpayService.verifySignature(
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    );
+
+    // Verify Signature unless in DryRun/Demo mode
+    const isValid = razorpayService.isDryRun() || razorpayService.isDemo() ||
+      razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
 
     if (!isValid) {
-      if (!razorpayService.isDryRun()) {
-        await sheets.appendRegistrationStatus({
-          timestamp: new Date().toISOString(),
-          fullName: data.fullName, dob: data.dob, age, category,
-          gender: data.gender, phone: data.phone, email: emailLower,
-          district: data.district, pincode: data.pincode, tshirtSize: data.tshirtSize,
-          bloodGroup: data.bloodGroup, tshirtNumber: "N/A", emergencyContact: data.emergencyContact,
-          status: "FAILED", failureReason: "Payment signature mismatch / tampered request"
-        });
+      if (razorpay_order_id) {
+        await Registration.findOneAndUpdate(
+          { razorpayOrderId: razorpay_order_id },
+          { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
+        );
       }
       return res.status(400).json({
         error: "PAYMENT_VERIFICATION_FAILED",
@@ -121,58 +121,90 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
-    // =========================================================================
-    // 🧪 DRY RUN MODE CHECK (Triggered via DRY_RUN_MODE=true in .env)
-    // =========================================================================
-    if (razorpayService.isDryRun()) {
-      console.log("🧪 [DRY RUN SUCCESS] Razorpay Signature Verified! Skipped Google Sheets DB, Slot Counter, and GHL Email.");
-      return res.json({
-        success: true,
-        category,
-        tshirtNumber: "TEST-0000",
-        registeredSoFar: meta.registrationCount,
-        closed: false,
-        note: "Dry Run complete. Signature verified with zero DB or email changes."
+    // Atomic Bib Number increment in MongoDB Settings
+    const updatedSettings = await Settings.findOneAndUpdate(
+      {},
+      { $inc: { tshirtCounter: 1 } },
+      { new: true, upsert: true }
+    );
+
+    const tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
+
+    // Find and update MongoDB Registration
+    let regRecord;
+    if (razorpay_order_id) {
+      regRecord = await Registration.findOneAndUpdate(
+        { razorpayOrderId: razorpay_order_id },
+        {
+          paymentStatus: "Success",
+          tshirtNumber,
+          razorpayPaymentId: razorpay_payment_id || "DEMO_PAY_ID",
+          razorpaySignature: razorpay_signature || "DEMO_SIG",
+          failureReason: "Payment Successful",
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+    }
+
+    if (!regRecord) {
+      const emailLower = String(data.email).trim().toLowerCase();
+      const age = parseInt(data.age || 20, 10);
+      const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
+      const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
+
+      regRecord = await Registration.create({
+        fullName: data.fullName, dob: data.dob, age,
+        participantType, category, gender: data.gender, phone: data.phone,
+        email: emailLower, district: data.district, pincode: data.pincode,
+        tshirtSize: data.tshirtSize, tshirtSelected: data.tshirtSelected !== false,
+        bloodGroup: data.bloodGroup, emergencyContact: data.emergencyContact,
+        tshirtNumber, paymentStatus: "Success",
+        razorpayOrderId: razorpay_order_id || `order_${Date.now()}`,
+        razorpayPaymentId: razorpay_payment_id || `pay_${Date.now()}`,
+        razorpaySignature: razorpay_signature || "N/A"
       });
     }
 
-    // =========================================================================
-    // PRODUCTION MODE (Both DEMO_MODE & DRY_RUN_MODE are false)
-    // =========================================================================
-    const tshirtNumber = await sheets.getNextTshirtNumber();
-    const newCount = await sheets.incrementRegistrationCount();
-
-    const record = {
-      timestamp: new Date().toISOString(),
-      fullName: data.fullName, dob: data.dob, age, category,
-      gender: data.gender, phone: data.phone, email: emailLower,
-      district: data.district, pincode: data.pincode, tshirtSize: data.tshirtSize,
-      bloodGroup: data.bloodGroup, tshirtNumber, emergencyContact: data.emergencyContact,
-      status: "SUCCESS", failureReason: `Payment ID: ${razorpay_payment_id || "N/A"} | Order ID: ${razorpay_order_id || "N/A"}`
-    };
-
-    // Append to Google Sheets tabs
-    await sheets.appendRegistrationSuccess(record);
-    await sheets.appendRegistrationStatus(record);
-
-    if (newCount >= RULES.MAX_REGISTRATIONS) {
-      await sheets.setClosed(true);
+    const newSuccessCount = await Registration.countDocuments({ paymentStatus: "Success" });
+    if (newSuccessCount >= settings.maxRegistrations) {
+      await Settings.updateOne({}, { isOpen: false });
     }
 
-    // Trigger Live GHL Email
+    // Synchronize to Google Sheets (Safe Try-Catch so Sheets never blocks DB)
+    const sheetData = {
+      timestamp: regRecord.createdAt.toISOString(),
+      fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
+      participantType: regRecord.participantType, category: regRecord.category,
+      gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
+      district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
+      tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
+      tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
+      registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
+      totalAmount: regRecord.totalAmount, status: "SUCCESS",
+      failureReason: `Payment ID: ${regRecord.razorpayPaymentId}`
+    };
+
+    sheets.appendRegistrationSuccess(sheetData).catch(() => {});
+    sheets.appendRegistrationStatus(sheetData).catch(() => {});
+
+    // Trigger Confirmation Email with complete pricing breakdown
     try {
-      await email.sendRegistrationEmail(record, false);
+      await emailService.sendRegistrationEmail(regRecord, razorpayService.isDemo());
     } catch (emailErr) {
-      console.error("GHL_EMAIL_SEND_FAILED", emailErr);
+      console.error("EMAIL_SEND_FAILED", emailErr.message);
     }
 
     return res.json({
       success: true,
-      category,
-      tshirtNumber,
-      registeredSoFar: newCount,
-      closed: newCount >= RULES.MAX_REGISTRATIONS
+      category: regRecord.category,
+      participantType: regRecord.participantType,
+      tshirtNumber: regRecord.tshirtNumber,
+      totalAmount: regRecord.totalAmount,
+      registeredSoFar: newSuccessCount,
+      closed: newSuccessCount >= settings.maxRegistrations
     });
+
   } catch (err) {
     console.error("REGISTER_ERROR", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
@@ -181,30 +213,27 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// Demo Mode Endpoint (Triggered when DEMO_MODE=true in .env)
+// Demo Mode Registration
 app.post("/api/register-demo", async (req, res) => {
   try {
     const data = req.body || {};
     const missingField = validate(data);
     if (missingField) return res.status(400).json({ error: "MISSING_FIELD", field: missingField });
 
-    const age = calculateAge(data.dob);
-    const category = age <= RULES.AGE_CUTOFF_YEARS ? RULES.CATEGORY_3_5KM : RULES.CATEGORY_7KM;
-    const demoTshirtNumber = "DEMO-0000";
-
-    const record = {
-      timestamp: new Date().toISOString(),
-      fullName: data.fullName, dob: data.dob, age, category,
+    const demoRecord = {
+      fullName: data.fullName, dob: data.dob, age: 20,
+      participantType: "Adult", category: "7 KM Timed Run",
       gender: data.gender, phone: data.phone, email: String(data.email).trim().toLowerCase(),
       district: data.district, pincode: data.pincode, tshirtSize: data.tshirtSize,
-      bloodGroup: data.bloodGroup, tshirtNumber: demoTshirtNumber, emergencyContact: data.emergencyContact
+      tshirtSelected: true, bloodGroup: data.bloodGroup, tshirtNumber: "DEMO-0000",
+      emergencyContact: data.emergencyContact, registrationFee: 500, tshirtFee: 200, totalAmount: 700
     };
 
-    await email.sendRegistrationEmail(record, true);
+    await emailService.sendRegistrationEmail(demoRecord, true);
 
     return res.json({
-      success: true, demo: true, category, tshirtNumber: demoTshirtNumber,
-      note: "Demo request successful. Test email dispatched via GHL without DB writes."
+      success: true, demo: true, category: demoRecord.category, tshirtNumber: demoRecord.tshirtNumber,
+      note: "Demo request successful. Test email dispatched without DB writes."
     });
   } catch (err) {
     console.error("DEMO_ERROR", err);
@@ -212,9 +241,11 @@ app.post("/api/register-demo", async (req, res) => {
   }
 });
 
+// Admin routes have been moved to the standalone chennimalaimarathon-admin project.
+
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Marathon Server running on port ${PORT}`));
 }
 
 module.exports = app;

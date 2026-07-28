@@ -71,29 +71,51 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!registerSection) return; // Not on the register page — nothing to do.
 
   /* ---------------------------------------------------------
-     Backend Configuration
+     Backend Configuration & MongoDB Dynamic Settings
   --------------------------------------------------------- */
-  // Dynamically points to local server or relative path when hosted live on Render
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
-  var DEMO_MODE = false; // Change to false for official launch!
+  var DEMO_MODE = false;
+
+  var currentSettings = {
+    adultFee: 500,
+    kidsFee: 300,
+    tshirtPrice: 200,
+    pricingTitle: "Marathon Registration Fees",
+    maxRegistrations: 1000,
+    remainingSlots: 1000,
+    showRemainingSlots: true,
+    isOpen: true
+  };
 
   /* ---------------------------------------------------------
-     Payment-status helpers (registration closure check,
-     and pending/failed payment status reporting)
+     Payment-status helpers & Dynamic MongoDB Status Fetch
   --------------------------------------------------------- */
   async function checkStatus() {
     try {
       var res = await fetch(BACKEND_URL + "/api/status");
       var data = await res.json();
       
-      // Syncs DEMO_MODE dynamically from .env!
       if (typeof data.demoMode !== "undefined") {
         DEMO_MODE = data.demoMode;
       }
 
-      if (data.closed) {
-        disableRegistrations("Registrations Closed! All 1,000 slots have been filled.");
+      currentSettings = Object.assign({}, currentSettings, data);
+
+      if (data.closed || data.isOpen === false) {
+        disableRegistrations("Registrations Closed! All slots have been filled or registrations are closed.");
+      }
+
+      // Handle dynamic remaining slots badge if present on DOM
+      var slotsContainer = document.getElementById("remainingSlotsBadge") || document.querySelector(".remaining-slots-box");
+      if (slotsContainer) {
+        if (data.showRemainingSlots === false) {
+          slotsContainer.style.display = "none";
+        } else {
+          slotsContainer.style.display = "";
+          var slotsVal = document.getElementById("remainingSlotsVal");
+          if (slotsVal) slotsVal.textContent = data.remainingSlots;
+        }
       }
     } catch (err) {
       console.warn("Status check error:", err);
@@ -591,6 +613,7 @@ document.addEventListener('DOMContentLoaded', function () {
       district: districtSelect.value,
       pincode: pincodeInput.value.trim(),
       tshirtSize: tshirtSelect.value,
+      tshirtSelected: tshirtSelect.value !== "" && tshirtSelect.value !== "NO",
       bloodGroup: bloodGroupSelect.value,
       gender: selectedGender,
       emergencyContact: emergencyContactInput.value.trim()

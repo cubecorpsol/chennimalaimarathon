@@ -1,20 +1,21 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
+const { Settings, Registration } = require("../db");
 const sheets = require("./sheetsService");
-const { RULES } = require("../config");
 
-// Read modes directly from .env dynamically
 const isDryRun = () => process.env.DRY_RUN_MODE === "true";
 const isDemo = () => process.env.DEMO_MODE === "true";
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || ""
+  key_id: process.env.RAZORPAY_KEY_ID || "dummy_key",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "dummy_secret"
 });
 
 function calculateAge(dobStr) {
+  if (!dobStr) return 20;
   const parts = dobStr.split(/[\/\-]/).map(Number);
   const [dd, mm, yyyy] = parts;
+  if (!yyyy || !mm || !dd) return 20;
   const dob = new Date(yyyy, mm - 1, dd);
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
@@ -25,119 +26,164 @@ function calculateAge(dobStr) {
   return age;
 }
 
-// 1. Create Order Handler
+// 1. Create Razorpay Order with backend pricing calculation & MongoDB persistence
 async function createOrder(req, res) {
   try {
-    const meta = await sheets.getMeta();
-    if (meta.closed || meta.registrationCount >= RULES.MAX_REGISTRATIONS) {
+    const settings = await Settings.findOne() || {
+      adultFee: 500, kidsFee: 300, tshirtPrice: 200,
+      maxRegistrations: 1000, isOpen: true, ageCutoff: 13
+    };
+
+    // Check total successful registrations count in MongoDB
+    const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
+    if (!settings.isOpen || successCount >= settings.maxRegistrations) {
       return res.status(403).json({
         error: "REGISTRATIONS_CLOSED",
-        message: "Registrations are closed. All 1,000 slots have been filled."
+        message: "Registrations are closed. All slots have been filled or registrations are disabled."
       });
     }
 
     const formData = req.body || {};
-    if (!isDryRun() && formData.email && (await sheets.emailExists(String(formData.email).trim().toLowerCase()))) {
-      return res.status(409).json({
-        error: "DUPLICATE_EMAIL",
-        message: "This email address is already registered."
-      });
+    const emailLower = String(formData.email || "").trim().toLowerCase();
+
+    // Check duplicate successful registration in MongoDB
+    if (emailLower) {
+      const existingSuccess = await Registration.findOne({ email: emailLower, paymentStatus: "Success" });
+      if (existingSuccess) {
+        return res.status(409).json({
+          error: "DUPLICATE_EMAIL",
+          message: "This email address is already registered."
+        });
+      }
     }
 
-    const options = {
-      amount: 10000, // ₹100 in paise
-      currency: "INR",
-      receipt: `marathon_rcpt_${Date.now()}`
-    };
-
-    const order = await razorpay.orders.create(options);
+    // Backend Pricing Logic
     const age = calculateAge(formData.dob);
-    const category = age <= RULES.AGE_CUTOFF_YEARS ? RULES.CATEGORY_3_5KM : RULES.CATEGORY_7KM;
+    const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
+    const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
 
-    // Log PENDING status ONLY in Production Mode
-    if (!isDryRun() && !isDemo()) {
-      await sheets.appendRegistrationStatus({
-        timestamp: new Date().toISOString(),
-        fullName: formData.fullName, dob: formData.dob, age, category,
-        gender: formData.gender, phone: formData.phone,
-        email: String(formData.email).trim().toLowerCase(),
-        district: formData.district, pincode: formData.pincode,
-        tshirtSize: formData.tshirtSize, bloodGroup: formData.bloodGroup,
-        tshirtNumber: "N/A", emergencyContact: formData.emergencyContact,
-        status: "PENDING", failureReason: `Order created (${order.id}), payment pending`
-      });
-    } else {
-      console.log("🧪 [TEST/DRY RUN] Razorpay order generated. DB writes skipped.");
+    const tshirtSelected = formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
+    const registrationFee = participantType === "Adult" ? settings.adultFee : settings.kidsFee;
+    const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
+    const totalAmount = registrationFee + tshirtFee;
+
+    // Create Razorpay Order
+    let orderId = `order_demo_${Date.now()}`;
+    let amountPaise = totalAmount * 100;
+
+    if (!isDryRun() && !isDemo() && process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+      const options = {
+        amount: amountPaise,
+        currency: "INR",
+        receipt: `marathon_rcpt_${Date.now()}`
+      };
+      const order = await razorpay.orders.create(options);
+      orderId = order.id;
     }
+
+    // Create/Upsert Pending Registration in MongoDB
+    const regDoc = await Registration.create({
+      fullName: formData.fullName || "",
+      dob: formData.dob || "",
+      age,
+      participantType,
+      category,
+      gender: formData.gender || "others",
+      phone: formData.phone || "",
+      email: emailLower,
+      district: formData.district || "",
+      pincode: formData.pincode || "",
+      tshirtSize: formData.tshirtSize || "M",
+      tshirtSelected,
+      bloodGroup: formData.bloodGroup || "O+",
+      emergencyContact: formData.emergencyContact || "",
+      registrationFee,
+      tshirtFee,
+      totalAmount,
+      paymentStatus: "Pending",
+      razorpayOrderId: orderId,
+      failureReason: `Order created (${orderId}), payment pending`
+    });
+
+    // Asynchronously sync to Sheets status tab (never block backend response if Sheets fails)
+    sheets.appendRegistrationStatus({
+      timestamp: new Date().toISOString(),
+      fullName: regDoc.fullName, dob: regDoc.dob, age: regDoc.age,
+      participantType: regDoc.participantType, category: regDoc.category,
+      gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
+      district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
+      tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
+      tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
+      registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
+      status: "PENDING", failureReason: regDoc.failureReason
+    }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
 
     return res.json({
       success: true,
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID
+      orderId,
+      amount: amountPaise,
+      currency: "INR",
+      keyId: process.env.RAZORPAY_KEY_ID || "",
+      totalAmount,
+      registrationFee,
+      tshirtFee,
+      participantType,
+      category
     });
+
   } catch (err) {
     console.error("RAZORPAY_CREATE_ORDER_ERROR:", err);
     return res.status(500).json({ error: "ORDER_CREATION_FAILED", message: err.message });
   }
 }
 
-// 2. Pending Handler (Modal Closed)
+// 2. Handle Pending (Modal Closed)
 async function handlePaymentPending(req, res) {
-  if (isDryRun() || isDemo()) {
-    console.log("🧪 [TEST/DRY RUN] Modal closed. DB logging skipped.");
-    return res.json({ success: true, dryRun: true });
-  }
-
   try {
-    const { formData, reason } = req.body || {};
-    if (!formData) return res.status(400).json({ error: "MISSING_DATA" });
-    const age = calculateAge(formData.dob);
-    const category = age <= RULES.AGE_CUTOFF_YEARS ? RULES.CATEGORY_3_5KM : RULES.CATEGORY_7KM;
+    const { formData, orderId, reason } = req.body || {};
+    const emailLower = String(formData?.email || "").trim().toLowerCase();
 
-    await sheets.appendRegistrationStatus({
-      timestamp: new Date().toISOString(),
-      fullName: formData.fullName, dob: formData.dob, age, category,
-      gender: formData.gender, phone: formData.phone,
-      email: String(formData.email).trim().toLowerCase(),
-      district: formData.district, pincode: formData.pincode,
-      tshirtSize: formData.tshirtSize, bloodGroup: formData.bloodGroup,
-      tshirtNumber: "N/A", emergencyContact: formData.emergencyContact,
-      status: "PENDING", failureReason: reason || "User closed payment window without paying"
-    });
+    if (orderId) {
+      await Registration.findOneAndUpdate(
+        { razorpayOrderId: orderId },
+        { paymentStatus: "Pending", failureReason: reason || "User closed payment window without paying" }
+      );
+    } else if (emailLower) {
+      await Registration.findOneAndUpdate(
+        { email: emailLower, paymentStatus: "Pending" },
+        { failureReason: reason || "User closed payment window without paying" },
+        { sort: { createdAt: -1 } }
+      );
+    }
+
     return res.json({ success: true, recorded: true });
   } catch (err) {
-    return res.status(500).json({ error: "LOG_FAILED" });
+    return res.status(500).json({ error: "LOG_FAILED", message: err.message });
   }
 }
 
-// 3. Payment Failure Handler
+// 3. Handle Failure
 async function handlePaymentFailure(req, res) {
-  if (isDryRun() || isDemo()) {
-    console.log("🧪 [TEST/DRY RUN] Payment failed test. DB logging skipped.");
-    return res.json({ success: true, dryRun: true });
-  }
-
   try {
-    const { formData, reason } = req.body || {};
-    if (!formData) return res.status(400).json({ error: "MISSING_DATA" });
-    const age = calculateAge(formData.dob);
-    const category = age <= RULES.AGE_CUTOFF_YEARS ? RULES.CATEGORY_3_5KM : RULES.CATEGORY_7KM;
+    const { formData, orderId, reason } = req.body || {};
+    const emailLower = String(formData?.email || "").trim().toLowerCase();
 
-    await sheets.appendRegistrationStatus({
-      timestamp: new Date().toISOString(),
-      fullName: formData.fullName, dob: formData.dob, age, category,
-      gender: formData.gender, phone: formData.phone,
-      email: String(formData.email).trim().toLowerCase(),
-      district: formData.district, pincode: formData.pincode,
-      tshirtSize: formData.tshirtSize, bloodGroup: formData.bloodGroup,
-      tshirtNumber: "N/A", emergencyContact: formData.emergencyContact,
-      status: "FAILED", failureReason: reason || "Payment transaction failed"
-    });
+    if (orderId) {
+      await Registration.findOneAndUpdate(
+        { razorpayOrderId: orderId },
+        { paymentStatus: "Failed", failureReason: reason || "Transaction declined by gateway" }
+      );
+    } else if (emailLower) {
+      await Registration.findOneAndUpdate(
+        { email: emailLower, paymentStatus: "Pending" },
+        { paymentStatus: "Failed", failureReason: reason || "Transaction declined by gateway" },
+        { sort: { createdAt: -1 } }
+      );
+    }
+
     return res.json({ success: true, recorded: true });
   } catch (err) {
-    return res.status(500).json({ error: "LOG_FAILED" });
+    return res.status(500).json({ error: "LOG_FAILED", message: err.message });
   }
 }
 
@@ -145,7 +191,7 @@ async function handlePaymentFailure(req, res) {
 function verifySignature(orderId, paymentId, signature) {
   if (!orderId || !paymentId || !signature) return false;
   const generatedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "dummy_secret")
     .update(`${orderId}|${paymentId}`)
     .digest("hex");
   return generatedSignature === signature;
