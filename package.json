@@ -5,7 +5,7 @@
   "main": "backend/src/server.js",
   "scripts": {
     "start": "node backend/src/server.js",
-    "dev": "node backend/src/server.js"
+    "dev": "node --watch backend/src/server.js"
   },
   "dependencies": {
     "async-mutex": "^0.5.0",
@@ -13,6 +13,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "googleapis": "^140.0.1",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "razorpay": "^2.9.8"
   }
 }

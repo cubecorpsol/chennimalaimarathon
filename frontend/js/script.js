@@ -76,7 +76,67 @@ document.addEventListener('DOMContentLoaded', function () {
   // Dynamically points to local server or relative path when hosted live on Render
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
-  var DEMO_MODE = true; // Change to false for official launch!
+  var DEMO_MODE = false; // Change to false for official launch!
+
+  /* ---------------------------------------------------------
+     Payment-status helpers (registration closure check,
+     and pending/failed payment status reporting)
+  --------------------------------------------------------- */
+  async function checkStatus() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/status");
+      var data = await res.json();
+      
+      // Syncs DEMO_MODE dynamically from .env!
+      if (typeof data.demoMode !== "undefined") {
+        DEMO_MODE = data.demoMode;
+      }
+
+      if (data.closed) {
+        disableRegistrations("Registrations Closed! All 1,000 slots have been filled.");
+      }
+    } catch (err) {
+      console.warn("Status check error:", err);
+    }
+  }
+
+  function disableRegistrations(msg) {
+    if (registerBtn) {
+      registerBtn.disabled = true;
+      registerBtn.textContent = "REGISTRATIONS CLOSED";
+    }
+    if (continueBtn) {
+      continueBtn.disabled = true;
+      continueBtn.textContent = "REGISTRATIONS CLOSED";
+    }
+    alert(msg);
+  }
+
+  async function reportPaymentPending(payload, reason) {
+    try {
+      await fetch(BACKEND_URL + "/api/payment-pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formData: payload, reason: reason })
+      });
+    } catch (err) {
+      console.error("Pending status log error", err);
+    }
+  }
+
+  async function reportPaymentFailure(payload, reason) {
+    try {
+      await fetch(BACKEND_URL + "/api/payment-failed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formData: payload, reason: reason })
+      });
+    } catch (err) {
+      console.error("Failure status log error", err);
+    }
+  }
+
+  checkStatus();
 
   /* ---------------------------------------------------------
      Element references
@@ -536,38 +596,146 @@ document.addEventListener('DOMContentLoaded', function () {
       emergencyContact: emergencyContactInput.value.trim()
     };
 
+    // DEMO MODE — unchanged: bypasses payment, registers directly.
+    if (DEMO_MODE) {
+      try {
+        var response = await fetch(BACKEND_URL + endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        var result = await response.json();
+
+        if (response.status === 409) {
+          alert("This email address is already registered. Please use a different email address.");
+          return;
+        }
+
+        if (response.status === 403) {
+          alert("Registrations are closed. All slots have been filled.");
+          return;
+        }
+
+        if (!response.ok) {
+          alert(result.message || "Something went wrong. Please try again.");
+          return;
+        }
+
+        // Success!
+        console.log("Backend response:", result);
+        goToStep('step-success');
+
+      } catch (err) {
+        console.error("API Error:", err);
+        alert("Could not connect to backend server. Make sure your Express server is running on port 3000.");
+      } finally {
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
+      }
+      return;
+    }
+
+    // LIVE MODE — create a Razorpay order, then track Success / Pending / Failed
+    // payment status against the same registration record (no duplicate rows).
     try {
-      var response = await fetch(BACKEND_URL + endpoint, {
+      var orderRes = await fetch(BACKEND_URL + "/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+      var orderData = await orderRes.json();
 
-      var result = await response.json();
-
-      if (response.status === 409) {
+      if (orderRes.status === 409) {
         alert("This email address is already registered. Please use a different email address.");
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
         return;
       }
 
-      if (response.status === 403) {
-        alert("Registrations are closed. All slots have been filled.");
+      if (orderRes.status === 403) {
+        disableRegistrations("Registrations are closed. All slots have been filled.");
         return;
       }
 
-      if (!response.ok) {
-        alert(result.message || "Something went wrong. Please try again.");
+      if (!orderRes.ok) {
+        alert(orderData.message || "Failed to initialize payment.");
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
         return;
       }
 
-      // Success!
-      console.log("Backend response:", result);
-      goToStep('step-success');
+      // Render Razorpay payment modal
+      var options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Chennimalai Marathon 2026",
+        description: "Registration Fee",
+        order_id: orderData.orderId,
+        prefill: {
+          name: payload.fullName,
+          email: payload.email,
+          contact: payload.phone
+        },
+        handler: async function (response) {
+          var finalPayload = {
+            ...payload,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature
+          };
+
+          try {
+            var verifyRes = await fetch(BACKEND_URL + "/api/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(finalPayload)
+            });
+
+            var verifyData = await verifyRes.json();
+            if (verifyRes.ok) {
+              // Payment verified — registration record updated to Success.
+              goToStep('step-success');
+              if (verifyData.closed) {
+                disableRegistrations("Registrations are now officially closed.");
+              }
+            } else {
+              alert(verifyData.message || "Payment verification failed.");
+              registerBtn.disabled = false;
+              registerBtn.textContent = originalText;
+            }
+          } catch (err) {
+            console.error("Verification error:", err);
+            alert("Payment received, but we could not confirm it with the server. Please contact support with your payment ID.");
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalText;
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            // User closed the payment window before paying — mark Pending.
+            reportPaymentPending(payload, "User closed payment window without paying");
+            alert("Registration incomplete. Your status has been saved as pending — you can complete payment later.");
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalText;
+          }
+        }
+      };
+
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        // Bank / gateway / transaction error — mark Failed.
+        reportPaymentFailure(payload, response.error.description || "Transaction declined");
+        alert("Payment failed: " + (response.error.description || "Transaction declined"));
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
+      });
+      rzp.open();
 
     } catch (err) {
-      console.error("API Error:", err);
-      alert("Could not connect to backend server. Make sure your Express server is running on port 3000.");
-    } finally {
+      console.error(err);
+      alert("Unable to connect to backend server. Please check your connection and try again.");
       registerBtn.disabled = false;
       registerBtn.textContent = originalText;
     }
