@@ -1,68 +1,53 @@
 const nodemailer = require("nodemailer");
+const sheets = require("./sheetsService");
 
-/**
- * Creates a Nodemailer transporter using environment variables.
- * Make sure these exist in your .env file:
- * SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
- */
-function createTransporter() {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
-    return null; // Return null if SMTP isn't configured yet
-  }
+async function createTransporter() {
+  const meta = await sheets.getMeta();
+  const useAccount1 = (meta.emailAccount1S || 0) <= (meta.emailAccount2S || 0);
 
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || "587", 10),
-    secure: process.env.SMTP_SECURE === "true", // true for 465, false for 587
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+  const account = useAccount1
+    ? { user: process.env.GMAIL_ACCOUNT_1, pass: process.env.GMAIL_APP_PASSWORD_1, num: 1 }
+    : { user: process.env.GMAIL_ACCOUNT_2, pass: process.env.GMAIL_APP_PASSWORD_2, num: 2 };
+
+  if (!account.user || !account.pass) return null;
+
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com", port: 587, secure: false,
+    auth: { user: account.user, pass: account.pass }
   });
+
+  return { transporter, accountNum: account.num, senderEmail: account.user };
 }
 
-/**
- * Generates HTML content for the confirmation email (Formatted for live customers, all form fields included)
- */
 function buildEmailHTML(record, isDemo) {
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px;">
-      <h2 style="color: #0d6efd; text-align: center;">Chennimalai Marathon Registration Confirmation</h2>
+    <div style="font-family: Arial, sans-serif; padding: 20px; color: #1c2b3a;">
+      ${isDemo ? '<div style="background: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; font-weight: bold; margin-bottom: 20px; border: 1px solid #ffeba1;">⚠️ DEMO MODE TEST EMAIL — NO DATABASE ROWS WERE WRITTEN & SLOT COUNT IS UNCHANGED.</div>' : ''}
+      <h2 style="color: #0d1f47;">Chennimalai Marathon Registration Confirmation</h2>
       <p>Dear <strong>${record.fullName}</strong>,</p>
-      <p>Thank you for registering! Here are your complete registration details:</p>
-      
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>T-Shirt Number:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd; color:#d9534f; font-weight:bold;">${record.tshirtNumber || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Category:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.category || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Full Name:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.fullName || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Email Address:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.email || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Phone Number:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.phone || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Date of Birth:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.dob || "N/A"} (Age: ${record.age || "N/A"})</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Gender:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.gender || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>T-Shirt Size:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.tshirtSize || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Blood Group:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.bloodGroup || "N/A"}</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>District & Pincode:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.district || "N/A"} (${record.pincode || "N/A"})</td></tr>
-        <tr><td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Emergency Contact:</strong></td><td style="padding: 8px; border-bottom: 1px solid #ddd;">${record.emergencyContact || "N/A"}</td></tr>
+      <p>Thank you for registering! Here are your complete details:</p>
+      <table style="width: 100%; max-width: 500px; border-collapse: collapse; font-size: 14px;">
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Bib Number:</td><td>${record.tshirtNumber || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Category:</td><td>${record.category || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Full Name:</td><td>${record.fullName || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Email:</td><td>${record.email || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Phone:</td><td>${record.phone || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">DOB:</td><td>${record.dob || "N/A"} (Age: ${record.age || "N/A"})</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">T-Shirt Size:</td><td>${record.tshirtSize || "N/A"}</td></tr>
+        <tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px 0; font-weight: bold;">Blood Group:</td><td>${record.bloodGroup || "N/A"}</td></tr>
       </table>
-
-      <p style="text-align: center; color: #666; font-size: 12px; margin-top: 30px;">
-        See you at the starting line! — Chennimalai Marathon Team
-      </p>
+      <p style="color: #1f6d3f; font-weight: bold; margin-top: 15px;">See you at the starting line on 30 August 2026 (Flag-off: 5:55 AM)!</p>
     </div>
   `;
 }
 
-/**
- * Syncs contact to GoHighLevel (GHL) and sends confirmation email via GHL Conversations API
- */
 async function sendToGHL(record, isDemo) {
   if (!process.env.GHL_PRIVATE_INTEGRATION_TOKEN || !process.env.GHL_LOCATION_ID) {
-    return false;
+    return { synced: false, emailSent: false };
   }
   try {
     const fetchFn = global.fetch || (await import("node-fetch")).default;
-    
-    // Step 1: Upsert Contact in CRM with ALL form fields
+
     const contactPayload = {
       locationId: process.env.GHL_LOCATION_ID,
       email: record.email,
@@ -72,16 +57,9 @@ async function sendToGHL(record, isDemo) {
       city: record.district,
       postalCode: record.pincode,
       tags: [
-        "Chennimalai Marathon",
-        record.category,
-        `TShirt: ${record.tshirtNumber}`,
-        `Size: ${record.tshirtSize}`,
-        `Blood: ${record.bloodGroup}`,
-        `Gender: ${record.gender}`,
-        `District: ${record.district}`,
-        `Pincode: ${record.pincode}`,
-        `Emergency: ${record.emergencyContact}`,
-        "Confirmed Registration"
+        "Chennimalai Marathon", record.category, `TShirt: ${record.tshirtNumber}`,
+        `Size: ${record.tshirtSize}`, `Blood: ${record.bloodGroup}`,
+        isDemo ? "DEMO TEST RUN" : "Confirmed Registration"
       ]
     };
 
@@ -90,28 +68,20 @@ async function sendToGHL(record, isDemo) {
       headers: {
         "Authorization": `Bearer ${process.env.GHL_PRIVATE_INTEGRATION_TOKEN}`,
         "Version": "2021-07-28",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify(contactPayload)
     });
 
-    if (!contactRes.ok) {
-      const errText = await contactRes.text();
-      console.warn(`⚠️ [GHL] Contact upsert failed (Status ${contactRes.status}): ${errText}`);
-      return false;
-    }
-
+    if (!contactRes.ok) return { synced: false, emailSent: false };
     const contactData = await contactRes.json();
-    const contactId = contactData.contact?.id || contactData.contact?._id || contactData.id;
-    console.log(`✅ [GHL CRM] Contact synced to GoHighLevel: ${record.email} (ID: ${contactId || "N/A"})`);
+    const contactId = contactData.contact?.id || contactData.id;
 
-    // Step 2: Request GHL to send confirmation email via Conversations API
     if (contactId) {
       const emailPayload = {
         type: "Email",
         contactId: contactId,
-        subject: `Registration Confirmed - Chennimalai Marathon (T-Shirt #${record.tshirtNumber})`,
+        subject: `${isDemo ? "[DEMO TEST] " : ""}Registration Confirmed - Chennimalai Marathon (Bib #${record.tshirtNumber})`,
         html: buildEmailHTML(record, isDemo)
       };
 
@@ -120,79 +90,50 @@ async function sendToGHL(record, isDemo) {
         headers: {
           "Authorization": `Bearer ${process.env.GHL_PRIVATE_INTEGRATION_TOKEN}`,
           "Version": "2021-04-15",
-          "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify(emailPayload)
       });
 
       if (msgRes.ok) {
-        console.log(`✉️ [GHL EMAIL] Confirmation email successfully dispatched via GoHighLevel to: ${record.email}`);
+        console.log(`✉️ [GHL EMAIL] Dispatched to: ${record.email}`);
         return { synced: true, emailSent: true };
-      } else {
-        const msgErr = await msgRes.text();
-        console.warn(`⚠️ [GHL EMAIL] Contact added, but direct GHL email dispatch failed (Status ${msgRes.status}): ${msgErr}`);
-        if (msgRes.status === 401 || msgErr.includes("scope") || msgErr.includes("authorized")) {
-          console.warn(`🔒 [GHL SCOPE ERROR] Your GoHighLevel token is missing the 'conversations/message.write' scope! Enable it in your GoHighLevel Developer Settings.`);
-        } else {
-          console.warn(`💡 Ensure your GoHighLevel account has an Email Provider (LC Email / Mailgun) enabled in Location Settings!`);
-        }
-        return { synced: true, emailSent: false };
       }
     }
     return { synced: true, emailSent: false };
   } catch (err) {
-    console.warn(`⚠️ [GHL] Sync/Email error: ${err.message}`);
+    console.warn(`⚠️ [GHL] Error: ${err.message}`);
     return { synced: false, emailSent: false };
   }
 }
 
-/**
- * Sends registration email (handles demo & live modes safely)
- */
 async function sendRegistrationEmail(record, isDemo = false) {
-  // 1. Sync contact to GoHighLevel CRM and try triggering GHL Email
   const ghlResult = await sendToGHL(record, isDemo);
+  if (ghlResult && ghlResult.emailSent) return true;
 
-  // If GHL successfully dispatched the email, we are done!
-  if (ghlResult && ghlResult.emailSent) {
-    return true;
-  }
-
-  // 2. Fallback to direct SMTP (Only used if GHL email dispatch failed or GHL is not configured)
   try {
-    const transporter = createTransporter();
-
-    if (!transporter) {
-      if (ghlResult && ghlResult.synced) {
-        console.log(`ℹ️ [NOTE] Contact synced to GoHighLevel CRM, but direct email was not sent (To fix: grant 'conversations/message.write' scope to your GHL token OR add SMTP credentials to .env).`);
-      } else {
-        console.log(`[EMAIL SIMULATION - ${isDemo ? "DEMO" : "LIVE"}] Sent to: ${record.email}`);
-      }
+    const smtpObj = await createTransporter();
+    if (!smtpObj) {
+      console.log(`[EMAIL SIMULATION - ${isDemo ? "DEMO" : "LIVE"}] Sent to: ${record.email}`);
       return true;
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || '"Chennimalai Marathon" <noreply@marathon.com>',
+      from: `"Chennimalai Marathon" <${smtpObj.senderEmail}>`,
       to: record.email,
-      subject: `Registration Confirmed - Chennimalai Marathon (T-Shirt #${record.tshirtNumber})`,
-      html: buildEmailHTML(record, isDemo),
+      subject: `${isDemo ? "[DEMO TEST] " : ""}Registration Confirmed - Chennimalai Marathon (Bib #${record.tshirtNumber})`,
+      html: buildEmailHTML(record, isDemo)
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✉️ Email successfully sent to ${record.email} (Message ID: ${info.messageId})`);
+    await smtpObj.transporter.sendMail(mailOptions);
+    await sheets.incrementEmailCount(smtpObj.accountNum);
+    console.log(`✉️ Sent via Gmail Account #${smtpObj.accountNum} to ${record.email}`);
     return true;
-
   } catch (err) {
     console.error("❌ EMAIL_SEND_ERROR:", err.message);
-    if (isDemo) {
-      console.warn("⚠️ Email dispatch failed in Demo mode, but registration was completed successfully.");
-      return false;
-    }
+    if (isDemo) return false;
     throw err;
   }
 }
 
-module.exports = {
-  sendRegistrationEmail,
-};
+module.exports = { sendRegistrationEmail };
