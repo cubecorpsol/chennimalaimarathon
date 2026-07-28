@@ -2,10 +2,10 @@
   "name": "chennimalai-marathon",
   "version": "1.0.0",
   "description": "Chennimalai Marathon Fullstack Application",
-  "main": "backend/backend/src/server.js",
+  "main": "backend/src/server.js",
   "scripts": {
-    "start": "node backend/backend/src/server.js",
-    "dev": "node backend/backend/src/server.js"
+    "start": "node backend/src/server.js",
+    "dev": "node backend/src/server.js"
   },
   "dependencies": {
     "async-mutex": "^0.5.0",

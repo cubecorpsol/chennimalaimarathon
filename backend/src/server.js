@@ -6,9 +6,8 @@ process.on("uncaughtException", (err) => {
 });
 
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "../../../.env") }); // Workspace root
-require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });    // backend/
-require("dotenv").config({ path: path.resolve(__dirname, "../.env") });       // backend/backend/
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") }); // Workspace root
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });    // backend/
 require("dotenv").config();                                                   // Current working directory
 const express = require("express");
 const cors = require("cors");
@@ -21,7 +20,7 @@ const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../../../frontend/final")));
+app.use(express.static(path.join(__dirname, "../../frontend/final")));
 
 const mutex = new Mutex();
 
