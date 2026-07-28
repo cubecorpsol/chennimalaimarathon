@@ -77,10 +77,6 @@ async function submitRegistration() {
     });
     const result = await res.json();
 
-    if (res.status === 409) {
-      alert("This email address is already registered. Please use a different email address.");
-      return;
-    }
     if (res.status === 403) {
       alert("Registrations are closed. All 1,000 slots have been filled.");
       return;

@@ -33,12 +33,32 @@ connectDB();
 // Serve Static Frontend Files
 app.use(express.static(path.join(__dirname, "../../frontend")));
 
+function calculateAge(dobStr) {
+  if (!dobStr) return 20;
+  const parts = dobStr.split(/[\/\-]/).map(Number);
+  const [dd, mm, yyyy] = parts;
+  if (!yyyy || !mm || !dd) return 20;
+  const dob = new Date(yyyy, mm - 1, dd);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasHadBirthday =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!hasHadBirthday) age--;
+  return age;
+}
+
 // Helper function to validate fields
 function validate(data) {
+  const age = calculateAge(data.dob);
+  const isKids = age <= 13;
   const required = [
     "fullName", "dob", "phone", "email", "district",
-    "pincode", "tshirtSize", "bloodGroup", "gender", "emergencyContact"
+    "pincode", "bloodGroup", "gender", "emergencyContact"
   ];
+  if (!isKids) {
+    required.push("tshirtSize");
+  }
   for (const field of required) {
     if (!data[field] || String(data[field]).trim() === "") return field;
   }
@@ -271,7 +291,7 @@ app.post("/api/register", async (req, res) => {
         fullName: data.fullName, dob: data.dob, age,
         participantType, category, gender: data.gender, phone: data.phone,
         email: emailLower, district: data.district, pincode: data.pincode,
-        tshirtSize: data.tshirtSize, tshirtSelected: data.tshirtSelected !== false,
+        tshirtSize: participantType === "Kids" ? "N/A" : (data.tshirtSize || "M"), tshirtSelected: participantType !== "Kids" && data.tshirtSelected !== false && data.tshirtSelected !== "false",
         bloodGroup: data.bloodGroup, emergencyContact: data.emergencyContact,
         tshirtNumber, paymentStatus: "Success",
         razorpayOrderId: razorpay_order_id || `order_${Date.now()}`,

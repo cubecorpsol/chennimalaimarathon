@@ -263,6 +263,7 @@ table { max-width: 100%; }
 @media (max-width: 768px) {
   .policy-card { padding: 26px 20px; }
   .policy-card h3 { font-size: 19px; }
+  .policy-card .merchant-badge-box { padding: 16px; flex-direction: column; gap: 10px; }
   .footer-legal-bar { padding: 18px 20px 0; gap: 12px; }
 }
 

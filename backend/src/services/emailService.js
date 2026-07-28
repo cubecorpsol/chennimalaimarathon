@@ -1,7 +1,7 @@
 const nodemailer = require("nodemailer");
 const axios = require("axios");
 
-// GoHighLevel (GHL) API Sender with Automatic Contact Upsert
+// GoHighLevel (GHL) API Sender with Automatic Contact Upsert & Tagging
 async function sendViaGHL(recipientData, subject, htmlContent) {
   const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
   const locationId = process.env.GHL_LOCATION_ID;
@@ -20,7 +20,8 @@ async function sendViaGHL(recipientData, subject, htmlContent) {
   const nameParts = fullName.trim().split(" ");
   const firstName = nameParts[0] || "Runner";
   const lastName = nameParts.slice(1).join(" ") || "";
-  const phone = typeof recipientData === "object" ? recipientData.phone || "" : "";
+  const rawPhone = typeof recipientData === "object" ? recipientData.phone || "" : "";
+  const cleanPhone = String(rawPhone).replace(/[^\d+]/g, "").trim();
 
   // Step 1: Upsert Contact in GHL to get a valid contactId
   const upsertUrl = "https://services.leadconnectorhq.com/contacts/upsert";
@@ -29,11 +30,16 @@ async function sendViaGHL(recipientData, subject, htmlContent) {
     email: toEmail,
     firstName: firstName,
     lastName: lastName,
-    phone: phone
+    tags: ["Chennimalai Marathon", "Confirmed Runner"]
   };
 
+  // Only include phone if valid length to prevent GHL API 400 validation errors
+  if (cleanPhone && cleanPhone.length >= 10) {
+    upsertPayload.phone = cleanPhone;
+  }
+
   const upsertRes = await axios.post(upsertUrl, upsertPayload, { headers });
-  const contactId = upsertRes.data?.contact?.id;
+  const contactId = upsertRes.data?.contact?.id || upsertRes.data?.id || upsertRes.data?.contactId;
 
   if (!contactId) {
     throw new Error("Could not retrieve GHL Contact ID during upsert");
@@ -47,6 +53,10 @@ async function sendViaGHL(recipientData, subject, htmlContent) {
     subject: subject,
     html: htmlContent
   };
+
+  if (process.env.GHL_FROM_EMAIL) {
+    msgPayload.emailFrom = process.env.GHL_FROM_EMAIL;
+  }
 
   const msgRes = await axios.post(msgUrl, msgPayload, { headers });
   return msgRes.status >= 200 && msgRes.status < 300;

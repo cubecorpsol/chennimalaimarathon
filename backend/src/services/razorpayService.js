@@ -49,17 +49,6 @@ async function createOrder(req, res) {
     const formData = req.body || {};
     const emailLower = String(formData.email || "").trim().toLowerCase();
 
-    // Check duplicate successful registration in MongoDB
-    if (emailLower) {
-      const existingSuccess = await Registration.findOne({ email: emailLower, paymentStatus: "Success" });
-      if (existingSuccess) {
-        return res.status(409).json({
-          error: "DUPLICATE_EMAIL",
-          message: "This email address is already registered."
-        });
-      }
-    }
-
     // Backend Pricing Logic
     const age = calculateAge(formData.dob);
     const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
@@ -105,9 +94,8 @@ async function createOrder(req, res) {
         phone: formData.phone || "",
         email: emailLower,
         district: formData.district || "",
-        pincode: formData.pincode || "",
-        tshirtSize: formData.tshirtSize || "M",
-        tshirtSelected,
+        tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
+        tshirtSelected: participantType !== "Kids" && tshirtSelected,
         bloodGroup: formData.bloodGroup || "O+",
         emergencyContact: formData.emergencyContact || "",
         registrationFee,
@@ -182,8 +170,8 @@ async function createOrder(req, res) {
       email: emailLower,
       district: formData.district || "",
       pincode: formData.pincode || "",
-      tshirtSize: formData.tshirtSize || "M",
-      tshirtSelected,
+      tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
+      tshirtSelected: participantType !== "Kids" && tshirtSelected,
       bloodGroup: formData.bloodGroup || "O+",
       emergencyContact: formData.emergencyContact || "",
       registrationFee,

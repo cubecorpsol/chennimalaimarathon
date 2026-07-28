@@ -66,6 +66,43 @@ document.addEventListener('DOMContentLoaded', function () {
    ========================================================= */
 
 document.addEventListener('DOMContentLoaded', function () {
+  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
+
+  function updateDynamicPrices(settings) {
+    if (!settings) return;
+    var adultFee = settings.adultFee || 500;
+    var kidsFee = settings.kidsFee || 300;
+    var tshirtPrice = settings.tshirtPrice || 200;
+
+    document.querySelectorAll('.dynamic-entry-fee').forEach(function (el) {
+      el.textContent = '₹' + adultFee + ' / ₹' + kidsFee;
+    });
+    document.querySelectorAll('.dynamic-adult-fee').forEach(function (el) {
+      el.textContent = '₹' + adultFee;
+    });
+    document.querySelectorAll('.dynamic-kids-fee').forEach(function (el) {
+      el.textContent = '₹' + kidsFee;
+    });
+    document.querySelectorAll('.dynamic-tshirt-fee').forEach(function (el) {
+      el.textContent = '₹' + tshirtPrice;
+    });
+  }
+
+  async function checkGlobalStatus() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/status");
+      var data = await res.json();
+      updateDynamicPrices(data);
+    } catch (err) {
+      console.warn("Global status check error:", err);
+    }
+  }
+
+  checkGlobalStatus();
+});
+
+document.addEventListener('DOMContentLoaded', function () {
 
   var registerSection = document.querySelector('.register-section');
   if (!registerSection) return; // Not on the register page — nothing to do.
@@ -101,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       currentSettings = Object.assign({}, currentSettings, data);
+      updateCategory();
 
       if (data.closed || data.isOpen === false) {
         disableRegistrations("Registrations Closed! All slots have been filled or registrations are closed.");
@@ -266,6 +304,8 @@ document.addEventListener('DOMContentLoaded', function () {
     return age;
   }
 
+  var tshirtFormGroup = document.getElementById('tshirtFormGroup');
+
   /* ---------------------------------------------------------
      DOB → Category auto selection
   --------------------------------------------------------- */
@@ -274,13 +314,19 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!dob) return;
 
     var age = calculateAge(dob, EVENT_DATE);
+    var isKids = age <= (currentSettings.ageCutoff || 13);
 
-    if (age <= 13) {
+    if (isKids) {
       if (categoryNameEl) categoryNameEl.textContent = '3.5 KM FUN RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: 13 & Below';
+      if (tshirtFormGroup) tshirtFormGroup.style.display = 'none';
+      if (tshirtSelect) tshirtSelect.value = 'N/A';
+      clearError('tshirt');
     } else {
       if (categoryNameEl) categoryNameEl.textContent = '7 KM TIMED RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: Above 13 Years';
+      if (tshirtFormGroup) tshirtFormGroup.style.display = '';
+      if (tshirtSelect && tshirtSelect.value === 'N/A') tshirtSelect.value = '';
     }
   }
 
@@ -399,7 +445,19 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function validateTshirt() {
-    if (!tshirtSelect.value) {
+    var dob = parseDOB(dobInput.value);
+    if (dob) {
+      var age = calculateAge(dob, EVENT_DATE);
+      if (age <= (currentSettings.ageCutoff || 13)) {
+        clearError('tshirt');
+        return true;
+      }
+    }
+    if (tshirtFormGroup && tshirtFormGroup.style.display === 'none') {
+      clearError('tshirt');
+      return true;
+    }
+    if (!tshirtSelect.value || tshirtSelect.value === 'N/A') {
       showError('tshirt', 'Please select a t-shirt size.');
       return false;
     }
@@ -622,8 +680,9 @@ document.addEventListener('DOMContentLoaded', function () {
     registerBtn.disabled = true;
     registerBtn.textContent = "Submitting...";
 
-    // Clean DOB into slashes DD/MM/YYYY for backend compatibility
-    var cleanDob = dobInput.value.replace(/\s+/g, '');
+    var dobForAge = parseDOB(cleanDob);
+    var userAge = dobForAge ? calculateAge(dobForAge, EVENT_DATE) : 20;
+    var isKidsUser = userAge <= (currentSettings.ageCutoff || 13);
 
     var payload = {
       fullName: fullNameInput.value.trim(),
@@ -632,8 +691,8 @@ document.addEventListener('DOMContentLoaded', function () {
       email: emailInput.value.trim(),
       district: districtSelect.value,
       pincode: pincodeInput.value.trim(),
-      tshirtSize: tshirtSelect.value,
-      tshirtSelected: tshirtSelect.value !== "" && tshirtSelect.value !== "NO",
+      tshirtSize: isKidsUser ? "N/A" : (tshirtSelect.value || "M"),
+      tshirtSelected: !isKidsUser && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A",
       bloodGroup: bloodGroupSelect.value,
       gender: selectedGender,
       emergencyContact: emergencyContactInput.value.trim()
@@ -688,13 +747,6 @@ document.addEventListener('DOMContentLoaded', function () {
         body: JSON.stringify(payload)
       });
       var orderData = await orderRes.json();
-
-      if (orderRes.status === 409) {
-        alert("This email address is already registered. Please use a different email address.");
-        registerBtn.disabled = false;
-        registerBtn.textContent = originalText;
-        return;
-      }
 
       if (orderRes.status === 403) {
         disableRegistrations("Registrations are closed. All slots have been filled.");
