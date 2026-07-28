@@ -98,14 +98,14 @@ app.post("/api/register", async (req, res) => {
 
     // Verify HMAC Payment Signature
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
-    const isValid = razorpayApi.verifySignature(
+    const isValid = razorpayService.verifySignature(
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
     );
 
     if (!isValid) {
-      if (!razorpayApi.isDryRun()) {
+      if (!razorpayService.isDryRun()) {
         await sheets.appendRegistrationStatus({
           timestamp: new Date().toISOString(),
           fullName: data.fullName, dob: data.dob, age, category,
@@ -124,7 +124,7 @@ app.post("/api/register", async (req, res) => {
     // =========================================================================
     // 🧪 DRY RUN MODE CHECK (Triggered via DRY_RUN_MODE=true in .env)
     // =========================================================================
-    if (razorpayApi.isDryRun()) {
+    if (razorpayService.isDryRun()) {
       console.log("🧪 [DRY RUN SUCCESS] Razorpay Signature Verified! Skipped Google Sheets DB, Slot Counter, and GHL Email.");
       return res.json({
         success: true,
@@ -148,7 +148,7 @@ app.post("/api/register", async (req, res) => {
       gender: data.gender, phone: data.phone, email: emailLower,
       district: data.district, pincode: data.pincode, tshirtSize: data.tshirtSize,
       bloodGroup: data.bloodGroup, tshirtNumber, emergencyContact: data.emergencyContact,
-      status: "SUCCESS", failureReason: "N/A"
+      status: "SUCCESS", failureReason: `Payment ID: ${razorpay_payment_id || "N/A"} | Order ID: ${razorpay_order_id || "N/A"}`
     };
 
     // Append to Google Sheets tabs

@@ -160,6 +160,112 @@ table { max-width: 100%; }
 .footer-copy-bar .footer-credit-link { color: var(--navy); font-weight: 600; text-decoration: none; }
 .footer-copy-bar .footer-credit-link:hover { text-decoration: underline; }
 
+.footer-legal-bar {
+  width: 100%;
+  max-width: 1680px;
+  margin: 24px auto 0;
+  padding: 20px 40px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.footer-legal-bar a {
+  color: #c7cedb;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.footer-legal-bar a:hover {
+  color: var(--orange);
+}
+.footer-legal-bar .sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+}
+
+/* =========================================================
+   LEGAL / POLICY COMPLIANCE PAGES
+========================================================= */
+.policy-section { padding: 60px 0 100px; }
+.policy-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.06);
+  padding: 40px 50px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.policy-card h3 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--navy);
+  margin-top: 32px;
+  margin-bottom: 14px;
+  border-bottom: 2px solid #f0f2f5;
+  padding-bottom: 8px;
+}
+.policy-card h3:first-child { margin-top: 0; }
+.policy-card p, .policy-card li {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-gray);
+  margin-bottom: 16px;
+}
+.policy-card ul {
+  margin-left: 20px;
+  margin-bottom: 20px;
+}
+.policy-card .highlight-box {
+  background: #f5faf6;
+  border-left: 4px solid var(--green);
+  padding: 20px 24px;
+  border-radius: 0 8px 8px 0;
+  margin: 24px 0;
+}
+.policy-card .highlight-box p {
+  color: var(--navy);
+  font-weight: 600;
+  margin: 0;
+}
+.policy-card .merchant-badge-box {
+  background: #fdf7ec;
+  border: 1.5px solid #f4dfa8;
+  border-radius: 10px;
+  padding: 22px 26px;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.policy-card .merchant-badge-box i {
+  font-size: 26px;
+  color: var(--orange-dark);
+  margin-top: 2px;
+}
+.policy-card .merchant-badge-box div h4 {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+.policy-card .merchant-badge-box div p {
+  font-size: 14px;
+  color: var(--text-dark);
+  margin: 0;
+  line-height: 1.6;
+}
+@media (max-width: 768px) {
+  .policy-card { padding: 26px 20px; }
+  .policy-card h3 { font-size: 19px; }
+  .footer-legal-bar { padding: 18px 20px 0; gap: 12px; }
+}
+
 /* =========================================================
    HOME PAGE — HERO
 ========================================================= */
