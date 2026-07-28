@@ -16,12 +16,13 @@ const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
 const razorpayService = require("./services/razorpayService");
-const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES } = require("./config");
+const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES, getBaseUrl } = require("./config");
 
 const JWT_SECRET = process.env.JWT_SECRET || "chennimalai_marathon_secret_jwt_key_2026";
 const mutex = new Mutex();
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -100,7 +101,7 @@ app.post("/api/payu/callback", async (req, res) => {
     const status = String(data.status || "").toLowerCase();
     const errorMsg = data.error_Message || data.unmappedstatus || "Transaction declined";
 
-    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get("host")}`;
+    const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
 
     if (!isValidHash && !razorpayService.isDryRun() && !razorpayService.isDemo()) {
       console.error("PAYU_CALLBACK_HASH_INVALID:", data);

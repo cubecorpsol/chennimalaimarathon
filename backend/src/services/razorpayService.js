@@ -3,6 +3,7 @@ const Razorpay = require("razorpay");
 const { Settings, Registration } = require("../db");
 const sheets = require("./sheetsService");
 const payuService = require("./payuService");
+const { getBaseUrl } = require("../config");
 
 const isDryRun = () => process.env.DRY_RUN_MODE === "true";
 const isDemo = () => process.env.DEMO_MODE === "true";
@@ -75,7 +76,7 @@ async function createOrder(req, res) {
       const payuTxnId = `PAYU_TXN_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
       const { key, salt, actionUrl } = payuService.getPayuCredentials();
 
-      const hostUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get("host")}`;
+      const hostUrl = getBaseUrl(req, "BACKEND_URL");
       const callbackUrl = `${hostUrl}/api/payu/callback`;
 
       const firstname = (formData.fullName || "Runner").trim().split(" ")[0] || "Runner";

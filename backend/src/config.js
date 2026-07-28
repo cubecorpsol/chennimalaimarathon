@@ -21,4 +21,18 @@ const RULES = {
   CATEGORY_7KM: "7 KM Timed Run"
 };
 
-module.exports = { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES };
+function getBaseUrl(req, envVar) {
+  if (envVar && process.env[envVar]) {
+    return process.env[envVar].replace(/\/+$/, "");
+  }
+  const host = req ? req.get("host") : "";
+  let protocol = (req && (req.headers["x-forwarded-proto"] || req.protocol)) || "http";
+  
+  // Default to https for non-localhost environments to avoid mixed-content / non-secure form POST warnings
+  if (protocol === "http" && host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
+    protocol = "https";
+  }
+  return `${protocol}://${host}`;
+}
+
+module.exports = { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES, getBaseUrl };
