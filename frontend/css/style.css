@@ -1103,3 +1103,140 @@ table { max-width: 100%; }
 @media (max-width: 600px) {
   .video-modal-close { top: -40px; width: 32px; height: 32px; font-size: 14px; }
 }
+
+/* =========================================================
+   PAYMENT GATEWAY MAINTENANCE POPUP MODAL
+   ========================================================= */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(13, 31, 71, 0.75);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeInModal 0.25s ease-out forwards;
+}
+
+@keyframes fadeInModal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.custom-modal-dialog {
+  background: #ffffff;
+  width: 100%;
+  max-width: 500px;
+  border-radius: 20px;
+  padding: 36px 30px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  animation: slideUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform: translateY(20px);
+}
+
+@keyframes slideUpModal {
+  to { transform: translateY(0); }
+}
+
+.modal-icon-badge {
+  width: 72px;
+  height: 72px;
+  background: #fffbe6;
+  border: 2px solid #ffe58f;
+  color: #d48806;
+  border-radius: 50%;
+  margin: 0 auto 18px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 10px 20px rgba(212, 136, 6, 0.15);
+}
+
+.custom-modal-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+
+.modal-main-msg {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-dark);
+  margin-bottom: 22px;
+}
+
+.modal-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 24px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.info-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.info-card-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-card-label {
+  color: var(--text-gray);
+  font-weight: 500;
+}
+
+.badge-status-pending {
+  background: #fef3c7;
+  color: #d97706;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.reason-text {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.btn-modal-agree {
+  width: 100%;
+  background: var(--navy);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(13, 31, 71, 0.25);
+}
+
+.btn-modal-agree:hover {
+  background: var(--green);
+  color: #ffffff;
+}
+

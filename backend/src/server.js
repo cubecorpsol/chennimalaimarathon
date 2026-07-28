@@ -107,6 +107,8 @@ app.get("/api/status", async (req, res) => {
 app.post("/api/create-order", razorpayService.createOrder);
 app.post("/api/payment-pending", razorpayService.handlePaymentPending);
 app.post("/api/payment-failed", razorpayService.handlePaymentFailure);
+app.post("/api/register-gateway-issue", razorpayService.handleRegisterGatewayIssue);
+
 
 // PayU Callback Route (HTTP POST Redirect from PayU Hosted Checkout)
 app.post("/api/payu/callback", async (req, res) => {

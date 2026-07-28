@@ -276,11 +276,124 @@ function verifySignature(orderId, paymentId, signature) {
   return generatedSignature === signature;
 }
 
+// 5. Handle Registration during Payment Gateway Maintenance / Integration Issue
+async function handleRegisterGatewayIssue(req, res) {
+  try {
+    const settings = await Settings.findOne() || {
+      adultFee: 500, kidsFee: 300, tshirtPrice: 200,
+      maxRegistrations: 1000, isOpen: true, ageCutoff: 13,
+      paymentGateway: "razorpay"
+    };
+
+    const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
+    if (!settings.isOpen || successCount >= settings.maxRegistrations) {
+      return res.status(403).json({
+        error: "REGISTRATIONS_CLOSED",
+        message: "Registrations are closed. All slots have been filled or registrations are disabled."
+      });
+    }
+
+    const formData = req.body || {};
+    const emailLower = String(formData.email || "").trim().toLowerCase();
+
+    if (!emailLower || !formData.fullName || !formData.phone) {
+      return res.status(400).json({ error: "MISSING_FIELD", message: "Required fields missing" });
+    }
+
+    const age = calculateAge(formData.dob);
+    const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
+    const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
+
+    const tshirtSelected = formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
+    const registrationFee = participantType === "Adult" ? settings.adultFee : settings.kidsFee;
+    const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
+    const totalAmount = registrationFee + tshirtFee;
+
+    const gatewayReason = "payment gateway integration issue";
+
+    // Upsert or create Pending Registration in MongoDB
+    let regDoc = await Registration.findOne({ email: emailLower, paymentStatus: "Pending" }).sort({ createdAt: -1 });
+
+    if (regDoc) {
+      regDoc.fullName = formData.fullName || regDoc.fullName;
+      regDoc.dob = formData.dob || regDoc.dob;
+      regDoc.age = age;
+      regDoc.participantType = participantType;
+      regDoc.category = category;
+      regDoc.gender = formData.gender || regDoc.gender;
+      regDoc.phone = formData.phone || regDoc.phone;
+      regDoc.district = formData.district || regDoc.district;
+      regDoc.pincode = formData.pincode || regDoc.pincode;
+      regDoc.tshirtSize = participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M");
+      regDoc.tshirtSelected = participantType !== "Kids" && tshirtSelected;
+      regDoc.bloodGroup = formData.bloodGroup || regDoc.bloodGroup;
+      regDoc.emergencyContact = formData.emergencyContact || regDoc.emergencyContact;
+      regDoc.registrationFee = registrationFee;
+      regDoc.tshirtFee = tshirtFee;
+      regDoc.totalAmount = totalAmount;
+      regDoc.paymentStatus = "Pending";
+      regDoc.failureReason = gatewayReason;
+      regDoc.paymentGatewayResponse = { notes: gatewayReason };
+      regDoc.updatedAt = new Date();
+      await regDoc.save();
+    } else {
+      regDoc = await Registration.create({
+        fullName: formData.fullName || "",
+        dob: formData.dob || "",
+        age,
+        participantType,
+        category,
+        gender: formData.gender || "others",
+        phone: formData.phone || "",
+        email: emailLower,
+        district: formData.district || "",
+        pincode: formData.pincode || "",
+        tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
+        tshirtSelected: participantType !== "Kids" && tshirtSelected,
+        bloodGroup: formData.bloodGroup || "O+",
+        emergencyContact: formData.emergencyContact || "",
+        registrationFee,
+        tshirtFee,
+        totalAmount,
+        paymentStatus: "Pending",
+        paymentGateway: settings.paymentGateway || "razorpay",
+        razorpayOrderId: `order_pending_${Date.now()}`,
+        failureReason: gatewayReason,
+        paymentGatewayResponse: { notes: gatewayReason }
+      });
+    }
+
+    // Async Sheets logging
+    sheets.appendRegistrationStatus({
+      timestamp: new Date().toISOString(),
+      fullName: regDoc.fullName, dob: regDoc.dob, age: regDoc.age,
+      participantType: regDoc.participantType, category: regDoc.category,
+      gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
+      district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
+      tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
+      tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
+      registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
+      status: "PENDING", failureReason: gatewayReason
+    }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
+
+    return res.json({
+      success: true,
+      message: "The payment link will be sent to you via email once our payment gateway issue is fixed. Try again at 5:30PM IST 29th July 2026",
+      registrationId: regDoc._id
+    });
+  } catch (err) {
+    console.error("REGISTER_GATEWAY_ISSUE_ERROR:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+}
+
 module.exports = {
   createOrder,
   handlePaymentPending,
   handlePaymentFailure,
+  handleRegisterGatewayIssue,
   verifySignature,
   isDryRun,
   isDemo
 };
+

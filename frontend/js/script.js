@@ -674,12 +674,31 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ---------------------------------------------------------
      BACKEND SUBMISSION & REGISTRATION
   --------------------------------------------------------- */
+  function showGatewayIssueModal() {
+    var modal = document.getElementById("gatewayIssueModal");
+    if (modal) {
+      modal.style.display = "flex";
+    } else {
+      alert("The payment link will be sent to you via email once our payment gateway issue is fixed. Please try again at 5:30 PM IST 29th July 2026.");
+      goToStep('step-success');
+    }
+  }
+
+  var gatewayModalCloseBtn = document.getElementById("gatewayModalCloseBtn");
+  if (gatewayModalCloseBtn) {
+    gatewayModalCloseBtn.addEventListener("click", function() {
+      var modal = document.getElementById("gatewayIssueModal");
+      if (modal) modal.style.display = "none";
+      goToStep('step-success');
+    });
+  }
+
   async function handleFormSubmission() {
-    var endpoint = DEMO_MODE ? "/api/register-demo" : "/api/register";
     var originalText = registerBtn.textContent;
     registerBtn.disabled = true;
     registerBtn.textContent = "Submitting...";
 
+    var cleanDob = dobInput ? dobInput.value.trim() : "";
     var dobForAge = parseDOB(cleanDob);
     var userAge = dobForAge ? calculateAge(dobForAge, EVENT_DATE) : 20;
     var isKidsUser = userAge <= (currentSettings.ageCutoff || 13);
@@ -698,161 +717,33 @@ document.addEventListener('DOMContentLoaded', function () {
       emergencyContact: emergencyContactInput.value.trim()
     };
 
-    // DEMO MODE — unchanged: bypasses payment, registers directly.
-    if (DEMO_MODE) {
-      try {
-        var response = await fetch(BACKEND_URL + endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        var result = await response.json();
-
-        if (response.status === 409) {
-          alert("This email address is already registered. Please use a different email address.");
-          return;
-        }
-
-        if (response.status === 403) {
-          alert("Registrations are closed. All slots have been filled.");
-          return;
-        }
-
-        if (!response.ok) {
-          alert(result.message || "Something went wrong. Please try again.");
-          return;
-        }
-
-        // Success!
-        console.log("Backend response:", result);
-        goToStep('step-success');
-
-      } catch (err) {
-        console.error("API Error:", err);
-        alert("Could not connect to backend server. Make sure your Express server is running on port 3000.");
-      } finally {
-        registerBtn.disabled = false;
-        registerBtn.textContent = originalText;
-      }
-      return;
-    }
-
-    // LIVE MODE — create a Razorpay order, then track Success / Pending / Failed
-    // payment status against the same registration record (no duplicate rows).
     try {
-      var orderRes = await fetch(BACKEND_URL + "/api/create-order", {
+      var response = await fetch(BACKEND_URL + "/api/register-gateway-issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      var orderData = await orderRes.json();
 
-      if (orderRes.status === 403) {
-        disableRegistrations("Registrations are closed. All slots have been filled.");
+      var result = await response.json();
+
+      if (response.status === 403) {
+        alert(result.message || "Registrations are closed. All slots have been filled.");
         return;
       }
 
-      if (!orderRes.ok) {
-        alert(orderData.message || "Failed to initialize payment.");
-        registerBtn.disabled = false;
-        registerBtn.textContent = originalText;
+      if (!response.ok) {
+        alert(result.message || "Something went wrong. Please try again.");
         return;
       }
 
-      // PayU Hosted Checkout Form POST Redirect
-      if (orderData.gateway === "payu" && orderData.payuParams) {
-        var form = document.createElement("form");
-        form.method = "POST";
-        form.action = orderData.action;
-
-        var params = orderData.payuParams;
-        for (var pKey in params) {
-          if (Object.prototype.hasOwnProperty.call(params, pKey)) {
-            var hiddenField = document.createElement("input");
-            hiddenField.type = "hidden";
-            hiddenField.name = pKey;
-            hiddenField.value = params[pKey];
-            form.appendChild(hiddenField);
-          }
-        }
-
-        document.body.appendChild(form);
-        form.submit();
-        return;
-      }
-
-      // Render Razorpay payment modal
-      var options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Chennimalai Marathon 2026",
-        description: "Registration Fee",
-        order_id: orderData.orderId,
-        prefill: {
-          name: payload.fullName,
-          email: payload.email,
-          contact: payload.phone
-        },
-        handler: async function (response) {
-          var finalPayload = {
-            ...payload,
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature
-          };
-
-          try {
-            var verifyRes = await fetch(BACKEND_URL + "/api/register", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(finalPayload)
-            });
-
-            var verifyData = await verifyRes.json();
-            if (verifyRes.ok) {
-              // Payment verified — registration record updated to Success.
-              goToStep('step-success');
-              if (verifyData.closed) {
-                disableRegistrations("Registrations are now officially closed.");
-              }
-            } else {
-              alert(verifyData.message || "Payment verification failed.");
-              registerBtn.disabled = false;
-              registerBtn.textContent = originalText;
-            }
-          } catch (err) {
-            console.error("Verification error:", err);
-            alert("Payment received, but we could not confirm it with the server. Please contact support with your payment ID.");
-            registerBtn.disabled = false;
-            registerBtn.textContent = originalText;
-          }
-        },
-        modal: {
-          ondismiss: function () {
-            // User closed the payment window before paying — mark Pending.
-            reportPaymentPending(payload, "User closed payment window without paying");
-            alert("Registration incomplete. Your status has been saved as pending — you can complete payment later.");
-            registerBtn.disabled = false;
-            registerBtn.textContent = originalText;
-          }
-        }
-      };
-
-      var rzp = new Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        // Bank / gateway / transaction error — mark Failed.
-        reportPaymentFailure(payload, response.error.description || "Transaction declined");
-        alert("Payment failed: " + (response.error.description || "Transaction declined"));
-        registerBtn.disabled = false;
-        registerBtn.textContent = originalText;
-      });
-      rzp.open();
+      // Record successfully saved as Pending with reason "payment gateway integration issue"
+      showGatewayIssueModal();
 
     } catch (err) {
-      console.error(err);
-      alert("Unable to connect to backend server. Please check your connection and try again.");
+      console.error("API Error during gateway issue submission:", err);
+      // Show modal even if network issue occurs so user receives clear notice
+      showGatewayIssueModal();
+    } finally {
       registerBtn.disabled = false;
       registerBtn.textContent = originalText;
     }
