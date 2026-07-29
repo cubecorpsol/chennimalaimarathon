@@ -387,11 +387,34 @@ async function handleRegisterGatewayIssue(req, res) {
   }
 }
 
+/**
+ * Create a Razorpay order for an existing registration (token / resume payment).
+ * Returns a demo order id when DRY_RUN / DEMO mode is active or credentials are missing.
+ */
+async function createRazorpayOrder(amountPaise, receiptPrefix = "marathon_token") {
+  const amount = Math.max(0, Math.round(Number(amountPaise) || 0));
+  if (isDryRun() || isDemo() || !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    return {
+      id: `order_demo_${Date.now()}`,
+      amount,
+      currency: "INR",
+      demo: true
+    };
+  }
+  const order = await razorpay.orders.create({
+    amount,
+    currency: "INR",
+    receipt: `${receiptPrefix}_${Date.now()}`.slice(0, 40)
+  });
+  return { id: order.id, amount: order.amount, currency: order.currency || "INR", demo: false };
+}
+
 module.exports = {
   createOrder,
   handlePaymentPending,
   handlePaymentFailure,
   handleRegisterGatewayIssue,
+  createRazorpayOrder,
   verifySignature,
   isDryRun,
   isDemo

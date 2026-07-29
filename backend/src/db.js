@@ -51,7 +51,10 @@ const RegistrationSchema = new mongoose.Schema({
   payuTxnId: { type: String, default: "" },
   payuMihpayid: { type: String, default: "" },
   paymentGatewayResponse: { type: mongoose.Schema.Types.Mixed, default: {} },
-  failureReason: { type: String, default: "" }
+  failureReason: { type: String, default: "" },
+  paymentToken: { type: String, default: null, index: true },
+  paymentTokenExpiresAt: { type: Date, default: null },
+  paymentTokenUsed: { type: Boolean, default: false }
 }, { timestamps: true });
 
 const AdminUserSchema = new mongoose.Schema({

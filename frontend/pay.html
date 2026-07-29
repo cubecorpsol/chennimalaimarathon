@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complete Pending Payment | Chennimalai Marathon 2026</title>
+  <meta name="description" content="Complete your pending registration payment for Chennimalai Marathon 2026.">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/webp" href="images/logo.webp">
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+
+  <style>
+    body {
+      background-color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .pay-container {
+      max-width: 620px;
+      margin: 40px auto;
+      padding: 0 20px;
+      flex: 1;
+    }
+    .pay-card {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+    }
+    .pay-header {
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #ffffff;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .pay-header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 6px 0;
+      color: #ffffff;
+    }
+    .pay-header p {
+      color: #ff6b00;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin: 0;
+    }
+    .pay-body {
+      padding: 28px 24px;
+    }
+    .summary-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .summary-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 14px;
+      border-bottom: 1px solid #edf2f7;
+    }
+    .summary-row:last-child {
+      border-bottom: none;
+    }
+    .summary-row .label {
+      color: #64748b;
+    }
+    .summary-row .value {
+      font-weight: 600;
+      color: #0f172a;
+      text-align: right;
+    }
+    .fee-total-card {
+      background: #fff7ed;
+      border: 1px solid #ffedd5;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .fee-total-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #9a3412;
+    }
+    .fee-total-amount {
+      font-family: 'Poppins', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      color: #ea580c;
+    }
+    .btn-pay-now {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      background: linear-gradient(135deg, #ff6b00, #ea580c);
+      color: #ffffff;
+      font-family: 'Poppins', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      padding: 16px 24px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(255, 107, 0, 0.35);
+      transition: all 0.2s ease;
+    }
+    .btn-pay-now:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(255, 107, 0, 0.45);
+    }
+    .btn-pay-now:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .notice-box {
+      margin-top: 20px;
+      background: #f1f5f9;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .notice-box i {
+      color: #94a3b8;
+      font-size: 16px;
+      margin-top: 2px;
+    }
+    .state-card {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .state-card i {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .state-card.success i { color: #16a34a; }
+    .state-card.expired i { color: #dc2626; }
+    .state-card.error i { color: #ea580c; }
+    .state-card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 10px 0;
+      color: #0f172a;
+    }
+    .state-card p {
+      font-size: 14px;
+      color: #64748b;
+      line-height: 1.6;
+      max-width: 440px;
+      margin: 0 auto 24px auto;
+    }
+    @media (max-width: 480px) {
+      .pay-container { padding: 0 12px; margin: 20px auto; }
+      .pay-header { padding: 20px 16px; }
+      .pay-body { padding: 20px 16px; }
+      .fee-total-amount { font-size: 20px; }
+    }
+  </style>
+
+  <!-- Razorpay SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+
+  <div class="pay-container">
+    <div class="pay-card">
+      <div class="pay-header">
+        <h1>Chennimalai Marathon 2026</h1>
+        <p>Complete Pending Payment</p>
+      </div>
+
+      <div class="pay-body" id="payContentArea">
+        <!-- Loading State -->
+        <div class="state-card" id="loadingState">
+          <i class="fa-solid fa-circle-notch fa-spin" style="color: #ff6b00;"></i>
+          <h3>Validating Payment Link...</h3>
+          <p>Please wait while we retrieve your marathon registration details.</p>
+        </div>
+
+        <!-- Paid / Invalid / Expired / Order Details injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script src="js/pay.js"></script>
+</body>
+</html>
