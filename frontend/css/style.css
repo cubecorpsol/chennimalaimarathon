@@ -851,7 +851,26 @@ table { max-width: 100%; }
 }
 .confirm-text { font-size: 13.5px; color: var(--text-dark); line-height: 1.5; }
 
-/* Registration Summary card */
+/* T-Shirt opt-in checkbox — plain, unhighlighted, unchecked by default */
+.tshirt-checkbox {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  cursor: pointer; margin-bottom: 2px;
+}
+.tshirt-checkbox input[type="checkbox"] { display: none; }
+.tshirt-checkmark {
+  width: 20px; height: 20px; border-radius: 5px; background: #fff; border: 1.5px solid var(--border-gray); color: transparent;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0;
+}
+.tshirt-checkbox input[type="checkbox"]:checked + .tshirt-checkmark {
+  background: var(--green-dark); border-color: var(--green-dark); color: #fff;
+}
+/* Higher specificity than ".form-group label i" (which colors icons orange)
+   so the tick stays fully invisible until the checkbox is actually checked. */
+.tshirt-checkbox .tshirt-checkmark i { color: transparent; font-size: 11px; margin-right: 0; }
+.tshirt-checkbox input[type="checkbox"]:checked + .tshirt-checkmark i { color: #fff; }
+.tshirt-checkbox-text { font-size: 13.5px; font-weight: 600; color: var(--text-dark); }
+
+/* Registration Summary card — Step 2, above the T&C confirmation checkbox */
 .reg-summary {
   width: 100%; border: 1.5px solid var(--border-gray); border-radius: 10px;
   padding: 18px 20px; margin: 22px 0 6px; background: #f6f9f6;
@@ -866,7 +885,7 @@ table { max-width: 100%; }
 .reg-summary-total { padding-top: 6px; }
 .reg-summary-total span { font-family: var(--font-display); font-weight: 800; font-size: 15px; color: var(--navy); }
 
-/* Custom alert modal */
+/* Custom alert modal — replaces native browser alert() on the register page */
 .alert-modal-overlay {
   display: none; position: fixed; inset: 0; background: rgba(13,31,71,0.55);
   z-index: 3000; align-items: center; justify-content: center; padding: 20px;
@@ -1014,8 +1033,10 @@ table { max-width: 100%; }
   .race-cats-stacked { flex-direction: column; }
 }
 
+@media (max-width: 768px) {
+  .info-strip-inner { flex-direction: column; align-items: flex-start; gap: 26px; }
+}
 @media (max-width: 480px) {
-  .info-strip-inner { flex-direction: column; }
   .cta-bar-inner { flex-direction: column; text-align: center; }
   .km-toggle { gap: 10px; }
   .km-pill { padding: 10px 20px; font-size: 13px; }
@@ -1024,6 +1045,25 @@ table { max-width: 100%; }
   .about-hero h2 { font-size: 24px; }
   .founder-card { padding: 20px 18px; }
   .faq-list { padding: 16px; }
+}
+
+/* ---------------------------------------------------------
+   Desktop/laptop (1024px+) fix — CTA bar (Home & About pages).
+   .cta-bar-inner had no base flex layout, so the "REGISTER NOW"
+   button dropped below the centered heading and stuck to the
+   left edge instead of sitting beside it. Scoped to 1024px+ so
+   mobile/tablet layouts are left exactly as they are.
+--------------------------------------------------------- */
+@media (min-width: 1024px) {
+  .cta-bar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 30px;
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
 }
 
 /* Prizes page responsive additions */
