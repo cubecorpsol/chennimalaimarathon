@@ -185,7 +185,7 @@
                   <option value="XXL">XXL</option>
                 </select>
               </div>
-              <div class="field-hint">You can select t-shirt size once and it cannot be changed later.</div>
+              <div class="field-hint" id="tshirt-hint">Available only for runners aged above 13 (7 KM category).</div>
               <div class="field-error" id="tshirt-error"></div>
             </div>
             <div class="form-group">
@@ -285,6 +285,27 @@
             <div class="field-error" id="emergencyContact-error"></div>
           </div>
 
+          <div class="reg-summary" id="regSummary">
+            <div class="reg-summary-title">Registration Summary</div>
+            <div class="reg-summary-row">
+              <span>Registration Fee</span>
+              <span id="summaryRegFee">₹0</span>
+            </div>
+            <!-- <div class="reg-summary-row" id="summaryTshirtRow" style="display:none;">
+              <span>T-Shirt Charge</span>
+              <span id="summaryTshirtFee">₹0</span>
+            </div>
+            <div class="reg-summary-row" id="summaryDiscountRow" style="display:none;">
+              <span>Discount</span>
+              <span id="summaryDiscount">-₹0</span>
+            </div> -->
+            <div class="reg-summary-divider"></div>
+            <div class="reg-summary-row reg-summary-total">
+              <span>Total Amount Payable</span>
+              <span id="summaryTotal">₹0</span>
+            </div>
+          </div>
+
           <label class="confirm-checkbox" for="fitnessConfirm">
             <input type="checkbox" id="fitnessConfirm">
             <span class="confirm-checkmark"><i class="fa-solid fa-check"></i></span>
@@ -374,6 +395,15 @@
   </div>
 </footer>
 <div class="footer-copy-bar">© 2026 Chennimalai Marathon. All Rights Reserved. | Designed by <a href="https://cubecorpsol.com" target="_blank" rel="noopener noreferrer" class="footer-credit-link">Cube Corpsol</a></div>
+
+<!-- ===================== ALERT MODAL (replaces browser alert()) ===================== -->
+<div class="alert-modal-overlay" id="alertModalOverlay">
+  <div class="alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="alertModalMessage">
+    <span class="alert-modal-icon"><i class="fa-solid fa-circle-exclamation"></i></span>
+    <div class="alert-modal-message" id="alertModalMessage"></div>
+    <button type="button" class="alert-modal-btn" id="alertModalClose">OK</button>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>

@@ -108,6 +108,40 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!registerSection) return; // Not on the register page — nothing to do.
 
   /* ---------------------------------------------------------
+     Custom Alert Modal — replaces every native browser alert()
+     with a styled in-page modal (message + OK button).
+  --------------------------------------------------------- */
+  var alertModalOverlay = document.getElementById('alertModalOverlay');
+  var alertModalMessage = document.getElementById('alertModalMessage');
+  var alertModalClose   = document.getElementById('alertModalClose');
+
+  function showAlertModal(message) {
+    if (!alertModalOverlay || !alertModalMessage) {
+      window.alert(message);
+      return;
+    }
+    alertModalMessage.textContent = message;
+    alertModalOverlay.classList.add('open');
+    if (alertModalClose) alertModalClose.focus();
+  }
+
+  function closeAlertModal() {
+    if (alertModalOverlay) alertModalOverlay.classList.remove('open');
+  }
+
+  if (alertModalClose) alertModalClose.addEventListener('click', closeAlertModal);
+  if (alertModalOverlay) {
+    alertModalOverlay.addEventListener('click', function (e) {
+      if (e.target === alertModalOverlay) closeAlertModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && alertModalOverlay && alertModalOverlay.classList.contains('open')) {
+      closeAlertModal();
+    }
+  });
+
+  /* ---------------------------------------------------------
      Backend Configuration & MongoDB Dynamic Settings
   --------------------------------------------------------- */
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
@@ -122,8 +156,43 @@ document.addEventListener('DOMContentLoaded', function () {
     maxRegistrations: 1000,
     remainingSlots: 1000,
     showRemainingSlots: true,
-    isOpen: true
+    isOpen: true,
+    ageCutoff: 13
   };
+
+  function getAgeCutoff() {
+    return currentSettings.ageCutoff || 13;
+  }
+
+  function formatRupee(amount) {
+    return '₹' + (Number(amount) || 0);
+  }
+
+  function updateTshirtHint() {
+    var hint = document.getElementById('tshirt-hint');
+    if (!hint) return;
+    var cutoff = getAgeCutoff();
+    hint.textContent = 'Available only for runners aged above ' + cutoff + ' (7 KM category).';
+  }
+
+  function updateRegistrationSummary() {
+    var feeEl = document.getElementById('summaryRegFee');
+    var totalEl = document.getElementById('summaryTotal');
+    if (!feeEl && !totalEl) return;
+
+    var cutoff = getAgeCutoff();
+    var fee = currentSettings.adultFee || 500;
+    var dob = dobInput ? parseDOB(dobInput.value) : null;
+    if (dob) {
+      var age = calculateAge(dob, EVENT_DATE);
+      fee = age <= cutoff
+        ? (currentSettings.kidsFee || 300)
+        : (currentSettings.adultFee || 500);
+    }
+
+    if (feeEl) feeEl.textContent = formatRupee(fee);
+    if (totalEl) totalEl.textContent = formatRupee(fee);
+  }
 
   /* ---------------------------------------------------------
      Payment-status helpers & Dynamic MongoDB Status Fetch
@@ -155,6 +224,9 @@ document.addEventListener('DOMContentLoaded', function () {
           if (slotsVal) slotsVal.textContent = data.remainingSlots;
         }
       }
+
+      updateTshirtHint();
+      updateRegistrationSummary();
     } catch (err) {
       console.warn("Status check error:", err);
     }
@@ -169,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
       continueBtn.disabled = true;
       continueBtn.textContent = "REGISTRATIONS CLOSED";
     }
-    alert(msg);
+    showAlertModal(msg);
   }
 
   async function reportPaymentPending(payload, reason) {
@@ -310,24 +382,35 @@ document.addEventListener('DOMContentLoaded', function () {
      DOB → Category auto selection
   --------------------------------------------------------- */
   function updateCategory() {
-    var dob = parseDOB(dobInput.value);
-    if (!dob) return;
+    if (!dobInput) {
+      updateRegistrationSummary();
+      return;
+    }
 
+    var dob = parseDOB(dobInput.value);
+    if (!dob) {
+      updateRegistrationSummary();
+      return;
+    }
+
+    var cutoff = getAgeCutoff();
     var age = calculateAge(dob, EVENT_DATE);
-    var isKids = age <= (currentSettings.ageCutoff || 13);
+    var isKids = age <= cutoff;
 
     if (isKids) {
       if (categoryNameEl) categoryNameEl.textContent = '3.5 KM FUN RUN';
-      if (categoryAgeEl) categoryAgeEl.textContent = 'Age: 13 & Below';
+      if (categoryAgeEl) categoryAgeEl.textContent = 'Age: ' + cutoff + ' & Below';
       if (tshirtFormGroup) tshirtFormGroup.style.display = 'none';
       if (tshirtSelect) tshirtSelect.value = 'N/A';
       clearError('tshirt');
     } else {
       if (categoryNameEl) categoryNameEl.textContent = '7 KM TIMED RUN';
-      if (categoryAgeEl) categoryAgeEl.textContent = 'Age: Above 13 Years';
+      if (categoryAgeEl) categoryAgeEl.textContent = 'Age: Above ' + cutoff + ' Years';
       if (tshirtFormGroup) tshirtFormGroup.style.display = '';
       if (tshirtSelect && tshirtSelect.value === 'N/A') tshirtSelect.value = '';
     }
+
+    updateRegistrationSummary();
   }
 
   if (dobInput) {
@@ -448,7 +531,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var dob = parseDOB(dobInput.value);
     if (dob) {
       var age = calculateAge(dob, EVENT_DATE);
-      if (age <= (currentSettings.ageCutoff || 13)) {
+      if (age <= getAgeCutoff()) {
         clearError('tshirt');
         return true;
       }
@@ -649,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     } else if (statusParam === 'failed') {
       var reason = urlParams.get('reason') || 'Transaction declined';
-      alert('Payment failed: ' + reason);
+      showAlertModal('Payment failed: ' + reason);
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
@@ -660,6 +743,7 @@ document.addEventListener('DOMContentLoaded', function () {
     continueBtn.addEventListener('click', function () {
       if (validateStep1()) {
         updateCategory();
+        updateRegistrationSummary();
         goToStep('step-additional');
       }
     });
@@ -679,7 +763,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (modal) {
       modal.style.display = "flex";
     } else {
-      alert("The payment link will be sent to you via email once our payment gateway issue is fixed. Please try again at 5:30 PM IST 29th July 2026.");
+      showAlertModal("The payment link will be sent to you via email once our payment gateway issue is fixed. Please try again at 5:30 PM IST 29th July 2026.");
       goToStep('step-success');
     }
   }
@@ -701,7 +785,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var cleanDob = dobInput ? dobInput.value.trim() : "";
     var dobForAge = parseDOB(cleanDob);
     var userAge = dobForAge ? calculateAge(dobForAge, EVENT_DATE) : 20;
-    var isKidsUser = userAge <= (currentSettings.ageCutoff || 13);
+    var isKidsUser = userAge <= getAgeCutoff();
 
     var payload = {
       fullName: fullNameInput.value.trim(),
@@ -727,12 +811,12 @@ document.addEventListener('DOMContentLoaded', function () {
       var result = await response.json();
 
       if (response.status === 403) {
-        alert(result.message || "Registrations are closed. All slots have been filled.");
+        showAlertModal(result.message || "Registrations are closed. All slots have been filled.");
         return;
       }
 
       if (!response.ok) {
-        alert(result.message || "Something went wrong. Please try again.");
+        showAlertModal(result.message || "Something went wrong. Please try again.");
         return;
       }
 

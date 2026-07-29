@@ -76,7 +76,8 @@ app.get("/api/status", async (req, res) => {
   try {
     const settings = await Settings.findOne() || {
       adultFee: 500, kidsFee: 300, tshirtPrice: 200, pricingTitle: "Marathon Registration Fees",
-      maxRegistrations: 1000, isOpen: true, showRemainingSlots: true, paymentGateway: "razorpay"
+      maxRegistrations: 1000, isOpen: true, showRemainingSlots: true, paymentGateway: "razorpay",
+      ageCutoff: 13
     };
 
     const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
@@ -93,6 +94,7 @@ app.get("/api/status", async (req, res) => {
       kidsFee: settings.kidsFee,
       tshirtPrice: settings.tshirtPrice,
       pricingTitle: settings.pricingTitle,
+      ageCutoff: settings.ageCutoff || 13,
       paymentGateway: settings.paymentGateway || "razorpay",
       demoMode: process.env.DEMO_MODE === "true",
       dryRunMode: process.env.DRY_RUN_MODE === "true"

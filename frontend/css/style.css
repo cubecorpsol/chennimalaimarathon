@@ -851,6 +851,47 @@ table { max-width: 100%; }
 }
 .confirm-text { font-size: 13.5px; color: var(--text-dark); line-height: 1.5; }
 
+/* Registration Summary card */
+.reg-summary {
+  width: 100%; border: 1.5px solid var(--border-gray); border-radius: 10px;
+  padding: 18px 20px; margin: 22px 0 6px; background: #f6f9f6;
+}
+.reg-summary-title {
+  font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--navy);
+  letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 12px;
+}
+.reg-summary-row { display: flex; align-items: center; justify-content: space-between; font-size: 13.5px; color: var(--text-dark); padding: 5px 0; }
+.reg-summary-row span:first-child { color: var(--text-gray); }
+.reg-summary-divider { height: 1px; background: var(--border-gray); margin: 8px 0; }
+.reg-summary-total { padding-top: 6px; }
+.reg-summary-total span { font-family: var(--font-display); font-weight: 800; font-size: 15px; color: var(--navy); }
+
+/* Custom alert modal */
+.alert-modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(13,31,71,0.55);
+  z-index: 3000; align-items: center; justify-content: center; padding: 20px;
+}
+.alert-modal-overlay.open { display: flex; }
+.alert-modal {
+  background: #fff; border-radius: 14px; padding: 32px 28px 28px; max-width: 380px; width: 100%;
+  text-align: center; box-shadow: 0 20px 50px rgba(13,31,71,0.28); animation: alertModalIn .18s ease;
+}
+@keyframes alertModalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.alert-modal-icon {
+  width: 52px; height: 52px; border-radius: 50%; background: #fdece9; color: #d9455f;
+  display: flex; align-items: center; justify-content: center; font-size: 22px; margin: 0 auto 16px;
+}
+.alert-modal-message { font-size: 14.5px; color: var(--text-dark); line-height: 1.6; margin-bottom: 24px; }
+.alert-modal-btn {
+  background: var(--green-dark); color: #fff; font-family: var(--font-display); font-weight: 700;
+  font-size: 14px; letter-spacing: 0.3px; padding: 12px 34px; border: none; border-radius: 8px;
+  cursor: pointer; transition: background .2s ease;
+}
+.alert-modal-btn:hover { background: var(--green); }
+
 /* Info box — "Why do we need this information?" */
 .info-box {
   display: flex; align-items: flex-start; gap: 16px; background: #f6f9f6;
