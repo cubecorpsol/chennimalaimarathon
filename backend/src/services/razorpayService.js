@@ -3,15 +3,21 @@ const Razorpay = require("razorpay");
 const { Settings, Registration } = require("../db");
 const sheets = require("./sheetsService");
 const payuService = require("./payuService");
-const { getBaseUrl } = require("../config");
-
-const isDryRun = () => process.env.DRY_RUN_MODE === "true";
-const isDemo = () => process.env.DEMO_MODE === "true";
+const { getBaseUrl, isDevelopment, isProduction } = require("../config");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "dummy_key",
   key_secret: process.env.RAZORPAY_KEY_SECRET || "dummy_secret"
 });
+
+function hasRazorpayCredentials() {
+  return !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+}
+
+/** In development (or when keys are missing), frontend should skip live Razorpay checkout. */
+function shouldBypassLiveCheckout() {
+  return isDevelopment() || !hasRazorpayCredentials();
+}
 
 function calculateAge(dobStr) {
   if (!dobStr) return 20;
@@ -145,10 +151,10 @@ async function createOrder(req, res) {
     }
 
     // Default: Razorpay Order Creation
-    let orderId = `order_demo_${Date.now()}`;
+    let orderId = `order_dev_${Date.now()}`;
     let amountPaise = totalAmount * 100;
 
-    if (!isDryRun() && !isDemo() && process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    if (isProduction() && hasRazorpayCredentials()) {
       const options = {
         amount: amountPaise,
         currency: "INR",
@@ -156,6 +162,11 @@ async function createOrder(req, res) {
       };
       const order = await razorpay.orders.create(options);
       orderId = order.id;
+    } else if (isProduction()) {
+      return res.status(500).json({
+        error: "GATEWAY_NOT_CONFIGURED",
+        message: "Razorpay credentials are not configured for production."
+      });
     }
 
     // Create/Upsert Pending Registration in MongoDB
@@ -203,6 +214,7 @@ async function createOrder(req, res) {
       amount: amountPaise,
       currency: "INR",
       keyId: process.env.RAZORPAY_KEY_ID || "",
+      isDevelopment: shouldBypassLiveCheckout(),
       totalAmount,
       registrationFee,
       tshirtFee,
@@ -276,126 +288,18 @@ function verifySignature(orderId, paymentId, signature) {
   return generatedSignature === signature;
 }
 
-// 5. Handle Registration during Payment Gateway Maintenance / Integration Issue
-async function handleRegisterGatewayIssue(req, res) {
-  try {
-    const settings = await Settings.findOne() || {
-      adultFee: 500, kidsFee: 300, tshirtPrice: 200,
-      maxRegistrations: 1000, isOpen: true, ageCutoff: 13,
-      paymentGateway: "razorpay"
-    };
-
-    const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
-    if (!settings.isOpen || successCount >= settings.maxRegistrations) {
-      return res.status(403).json({
-        error: "REGISTRATIONS_CLOSED",
-        message: "Registrations are closed. All slots have been filled or registrations are disabled."
-      });
-    }
-
-    const formData = req.body || {};
-    const emailLower = String(formData.email || "").trim().toLowerCase();
-
-    if (!emailLower || !formData.fullName || !formData.phone) {
-      return res.status(400).json({ error: "MISSING_FIELD", message: "Required fields missing" });
-    }
-
-    const age = calculateAge(formData.dob);
-    const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
-    const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
-
-    const tshirtSelected = formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
-    const registrationFee = participantType === "Adult" ? settings.adultFee : settings.kidsFee;
-    const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
-    const totalAmount = registrationFee + tshirtFee;
-
-    const gatewayReason = "payment gateway integration issue";
-
-    // Upsert or create Pending Registration in MongoDB
-    let regDoc = await Registration.findOne({ email: emailLower, paymentStatus: "Pending" }).sort({ createdAt: -1 });
-
-    if (regDoc) {
-      regDoc.fullName = formData.fullName || regDoc.fullName;
-      regDoc.dob = formData.dob || regDoc.dob;
-      regDoc.age = age;
-      regDoc.participantType = participantType;
-      regDoc.category = category;
-      regDoc.gender = formData.gender || regDoc.gender;
-      regDoc.phone = formData.phone || regDoc.phone;
-      regDoc.district = formData.district || regDoc.district;
-      regDoc.pincode = formData.pincode || regDoc.pincode;
-      regDoc.tshirtSize = participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M");
-      regDoc.tshirtSelected = participantType !== "Kids" && tshirtSelected;
-      regDoc.bloodGroup = formData.bloodGroup || regDoc.bloodGroup;
-      regDoc.emergencyContact = formData.emergencyContact || regDoc.emergencyContact;
-      regDoc.registrationFee = registrationFee;
-      regDoc.tshirtFee = tshirtFee;
-      regDoc.totalAmount = totalAmount;
-      regDoc.paymentStatus = "Pending";
-      regDoc.failureReason = gatewayReason;
-      regDoc.paymentGatewayResponse = { notes: gatewayReason };
-      regDoc.updatedAt = new Date();
-      await regDoc.save();
-    } else {
-      regDoc = await Registration.create({
-        fullName: formData.fullName || "",
-        dob: formData.dob || "",
-        age,
-        participantType,
-        category,
-        gender: formData.gender || "others",
-        phone: formData.phone || "",
-        email: emailLower,
-        district: formData.district || "",
-        pincode: formData.pincode || "",
-        tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
-        tshirtSelected: participantType !== "Kids" && tshirtSelected,
-        bloodGroup: formData.bloodGroup || "O+",
-        emergencyContact: formData.emergencyContact || "",
-        registrationFee,
-        tshirtFee,
-        totalAmount,
-        paymentStatus: "Pending",
-        paymentGateway: settings.paymentGateway || "razorpay",
-        razorpayOrderId: `order_pending_${Date.now()}`,
-        failureReason: gatewayReason,
-        paymentGatewayResponse: { notes: gatewayReason }
-      });
-    }
-
-    // Async Sheets logging
-    sheets.appendRegistrationStatus({
-      timestamp: new Date().toISOString(),
-      fullName: regDoc.fullName, dob: regDoc.dob, age: regDoc.age,
-      participantType: regDoc.participantType, category: regDoc.category,
-      gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
-      district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
-      tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
-      tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
-      registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
-      status: "PENDING", failureReason: gatewayReason
-    }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
-
-    return res.json({
-      success: true,
-      message: "The payment link will be sent to you via email once our payment gateway issue is fixed. Try again at 5:30PM IST 29th July 2026",
-      registrationId: regDoc._id
-    });
-  } catch (err) {
-    console.error("REGISTER_GATEWAY_ISSUE_ERROR:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
-  }
-}
-
 /**
  * Create a Razorpay order for an existing registration (token / resume payment).
- * Returns a demo order id when DRY_RUN / DEMO mode is active or credentials are missing.
+ * Returns a development order id when NODE_ENV is not production or credentials are missing.
  */
 async function createRazorpayOrder(amountPaise, receiptPrefix = "marathon_token") {
   const amount = Math.max(0, Math.round(Number(amountPaise) || 0));
-  if (isDryRun() || isDemo() || !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+  if (isDevelopment() || !hasRazorpayCredentials()) {
+    if (isProduction() && !hasRazorpayCredentials()) {
+      throw new Error("Razorpay credentials are not configured for production.");
+    }
     return {
-      id: `order_demo_${Date.now()}`,
+      id: `order_dev_${Date.now()}`,
       amount,
       currency: "INR",
       demo: true
@@ -413,10 +317,10 @@ module.exports = {
   createOrder,
   handlePaymentPending,
   handlePaymentFailure,
-  handleRegisterGatewayIssue,
   createRazorpayOrder,
   verifySignature,
-  isDryRun,
-  isDemo
+  isDevelopment,
+  isProduction,
+  shouldBypassLiveCheckout
 };
 

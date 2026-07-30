@@ -2,11 +2,9 @@
    Chennimalai Marathon — Frontend <-> Backend Connector
    ============================================================ */
 
-// 1. Point to local server during testing; update to Render URL for production:
-const BACKEND_URL = "http://localhost:3000"; 
-
-// 2. Keep DEMO_MODE = true for testing; flip to false on official launch day!
-const DEMO_MODE = true; 
+// Point to local server during testing; leave empty for same-origin production.
+const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+const BACKEND_URL = isLocal ? "http://localhost:3000" : "";
 
 // ---------- STEP 1: Save Step 1 Data to Session Storage ----------
 function saveStep1AndContinue(nextPageUrl) {
@@ -65,12 +63,11 @@ async function submitRegistration() {
 
   const fullPayload = { ...step1Data, gender, emergencyContact };
 
-  const endpoint = DEMO_MODE ? "/api/register-demo" : "/api/register";
   const registerBtn = document.getElementById("registerNowBtn");
   if (registerBtn) { registerBtn.disabled = true; registerBtn.textContent = "Submitting..."; }
 
   try {
-    const res = await fetch(`${BACKEND_URL}${endpoint}`, {
+    const res = await fetch(`${BACKEND_URL}/api/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fullPayload)
@@ -89,7 +86,6 @@ async function submitRegistration() {
     // Success Response
     sessionStorage.removeItem("marathonStep1");
     alert(
-      (DEMO_MODE ? "[DEMO SUCCESS] " : "") +
       `Registration Successful!\n\n` +
       `Category: ${result.category}\n` +
       `T-Shirt Number: ${result.tshirtNumber}\n\n` +

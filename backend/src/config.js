@@ -35,4 +35,16 @@ function getBaseUrl(req, envVar) {
   return `${protocol}://${host}`;
 }
 
-module.exports = { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES, getBaseUrl };
+/** Live mode only when NODE_ENV=production. Anything else is treated as development. */
+const isProduction = () => process.env.NODE_ENV === "production";
+const isDevelopment = () => !isProduction();
+
+module.exports = {
+  DISTRICTS,
+  BLOOD_GROUPS,
+  TSHIRT_SIZES,
+  RULES,
+  getBaseUrl,
+  isProduction,
+  isDevelopment
+};

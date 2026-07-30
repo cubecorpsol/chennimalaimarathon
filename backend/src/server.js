@@ -16,7 +16,7 @@ const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
 const razorpayService = require("./services/razorpayService");
-const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES, getBaseUrl } = require("./config");
+const { DISTRICTS, BLOOD_GROUPS, TSHIRT_SIZES, RULES, getBaseUrl, isDevelopment } = require("./config");
 
 const JWT_SECRET = process.env.JWT_SECRET || "chennimalai_marathon_secret_jwt_key_2026";
 const mutex = new Mutex();
@@ -96,8 +96,8 @@ app.get("/api/status", async (req, res) => {
       pricingTitle: settings.pricingTitle,
       ageCutoff: settings.ageCutoff || 13,
       paymentGateway: settings.paymentGateway || "razorpay",
-      demoMode: process.env.DEMO_MODE === "true",
-      dryRunMode: process.env.DRY_RUN_MODE === "true"
+      nodeEnv: process.env.NODE_ENV || "development",
+      isDevelopment: isDevelopment()
     });
   } catch (err) {
     console.error("STATUS_ERROR", err);
@@ -109,7 +109,6 @@ app.get("/api/status", async (req, res) => {
 app.post("/api/create-order", razorpayService.createOrder);
 app.post("/api/payment-pending", razorpayService.handlePaymentPending);
 app.post("/api/payment-failed", razorpayService.handlePaymentFailure);
-app.post("/api/register-gateway-issue", razorpayService.handleRegisterGatewayIssue);
 
 function isPaymentTokenInvalid(reg) {
   if (!reg) return { invalid: true, code: "INVALID_TOKEN", message: "Invalid or non-existent payment link." };
@@ -301,7 +300,7 @@ app.post("/api/create-order-for-token", async (req, res) => {
       amount: amountPaise,
       currency: "INR",
       key: process.env.RAZORPAY_KEY_ID || "",
-      demoMode: !!order.demo || razorpayService.isDemo() || razorpayService.isDryRun(),
+      isDevelopment: !!order.demo || isDevelopment(),
       totalAmount,
       fullName: reg.fullName,
       email: reg.email,
@@ -340,7 +339,7 @@ app.post("/api/verify-token-payment", async (req, res) => {
       return res.status(400).json({ error: "ORDER_MISMATCH", message: "Payment order does not match this payment link." });
     }
 
-    const isValid = razorpayService.isDryRun() || razorpayService.isDemo() ||
+    const isValid = isDevelopment() ||
       razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
 
     if (!isValid) {
@@ -377,7 +376,7 @@ app.post("/api/verify-token-payment", async (req, res) => {
     sheets.appendRegistrationStatus(sheetData).catch(() => {});
 
     try {
-      await emailService.sendRegistrationEmail(updated, razorpayService.isDemo());
+      await emailService.sendRegistrationEmail(updated, isDevelopment());
     } catch (emailErr) {
       console.error("TOKEN_PAYMENT_EMAIL_FAILED", emailErr.message);
     }
@@ -418,7 +417,7 @@ app.post("/api/payu/callback", async (req, res) => {
     const successRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
     const failRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
 
-    if (!isValidHash && !razorpayService.isDryRun() && !razorpayService.isDemo()) {
+    if (!isValidHash && !isDevelopment()) {
       console.error("PAYU_CALLBACK_HASH_INVALID:", data);
       if (txnid) {
         await Registration.findOneAndUpdate(
@@ -487,7 +486,7 @@ app.post("/api/payu/callback", async (req, res) => {
         sheets.appendRegistrationStatus(sheetData).catch(() => {});
 
         try {
-          await emailService.sendRegistrationEmail(regRecord, razorpayService.isDemo());
+          await emailService.sendRegistrationEmail(regRecord, isDevelopment());
         } catch (e) {
           console.error("PAYU_EMAIL_SEND_FAILED", e.message);
         }
@@ -532,7 +531,7 @@ app.post("/api/register", async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
 
     // Verify Signature unless in DryRun/Demo mode
-    const isValid = razorpayService.isDryRun() || razorpayService.isDemo() ||
+    const isValid = isDevelopment() ||
       razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
 
     if (!isValid) {
@@ -623,7 +622,7 @@ app.post("/api/register", async (req, res) => {
 
     // Trigger Confirmation Email with complete pricing breakdown
     try {
-      await emailService.sendRegistrationEmail(regRecord, razorpayService.isDemo());
+      await emailService.sendRegistrationEmail(regRecord, isDevelopment());
     } catch (emailErr) {
       console.error("EMAIL_SEND_FAILED", emailErr.message);
     }
@@ -643,34 +642,6 @@ app.post("/api/register", async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   } finally {
     release();
-  }
-});
-
-// Demo Mode Registration
-app.post("/api/register-demo", async (req, res) => {
-  try {
-    const data = req.body || {};
-    const missingField = validate(data);
-    if (missingField) return res.status(400).json({ error: "MISSING_FIELD", field: missingField });
-
-    const demoRecord = {
-      fullName: data.fullName, dob: data.dob, age: 20,
-      participantType: "Adult", category: "7 KM Timed Run",
-      gender: data.gender, phone: data.phone, email: String(data.email).trim().toLowerCase(),
-      district: data.district, pincode: data.pincode, tshirtSize: data.tshirtSize,
-      tshirtSelected: true, bloodGroup: data.bloodGroup, tshirtNumber: "DEMO-0000",
-      emergencyContact: data.emergencyContact, registrationFee: 500, tshirtFee: 200, totalAmount: 700
-    };
-
-    await emailService.sendRegistrationEmail(demoRecord, true);
-
-    return res.json({
-      success: true, demo: true, category: demoRecord.category, tshirtNumber: demoRecord.tshirtNumber,
-      note: "Demo request successful. Test email dispatched without DB writes."
-    });
-  } catch (err) {
-    console.error("DEMO_ERROR", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });
 

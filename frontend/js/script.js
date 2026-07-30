@@ -146,7 +146,6 @@ document.addEventListener('DOMContentLoaded', function () {
   --------------------------------------------------------- */
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
-  var DEMO_MODE = false;
 
   var currentSettings = {
     adultFee: 500,
@@ -201,10 +200,6 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
       var res = await fetch(BACKEND_URL + "/api/status");
       var data = await res.json();
-      
-      if (typeof data.demoMode !== "undefined") {
-        DEMO_MODE = data.demoMode;
-      }
 
       currentSettings = Object.assign({}, currentSettings, data);
       updateCategory();
@@ -758,29 +753,10 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ---------------------------------------------------------
      BACKEND SUBMISSION & REGISTRATION
   --------------------------------------------------------- */
-  function showGatewayIssueModal() {
-    var modal = document.getElementById("gatewayIssueModal");
-    if (modal) {
-      modal.style.display = "flex";
-    } else {
-      showAlertModal("The payment link will be sent to you via email once our payment gateway issue is fixed. Please try again at 5:30 PM IST 29th July 2026.");
-      goToStep('step-success');
-    }
-  }
-
-  var gatewayModalCloseBtn = document.getElementById("gatewayModalCloseBtn");
-  if (gatewayModalCloseBtn) {
-    gatewayModalCloseBtn.addEventListener("click", function() {
-      var modal = document.getElementById("gatewayIssueModal");
-      if (modal) modal.style.display = "none";
-      goToStep('step-success');
-    });
-  }
-
   async function handleFormSubmission() {
     var originalText = registerBtn.textContent;
     registerBtn.disabled = true;
-    registerBtn.textContent = "Submitting...";
+    registerBtn.textContent = "Processing Payment...";
 
     var cleanDob = dobInput ? dobInput.value.trim() : "";
     var dobForAge = parseDOB(cleanDob);
@@ -802,32 +778,148 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     try {
-      var response = await fetch(BACKEND_URL + "/api/register-gateway-issue", {
+      var orderRes = await fetch(BACKEND_URL + "/api/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
-      var result = await response.json();
+      var orderData = await orderRes.json();
 
-      if (response.status === 403) {
-        showAlertModal(result.message || "Registrations are closed. All slots have been filled.");
+      if (orderRes.status === 403) {
+        showAlertModal(orderData.message || "Registrations are closed. All slots have been filled.");
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
         return;
       }
 
-      if (!response.ok) {
-        showAlertModal(result.message || "Something went wrong. Please try again.");
+      if (!orderRes.ok) {
+        showAlertModal(orderData.message || "Could not initialize registration. Please try again.");
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
         return;
       }
 
-      // Record successfully saved as Pending with reason "payment gateway integration issue"
-      showGatewayIssueModal();
+      // PayU Hosted Checkout Form POST Redirect (check before Razorpay SDK)
+      if (orderData.gateway === "payu" && orderData.payuParams) {
+        var form = document.createElement("form");
+        form.method = "POST";
+        form.action = orderData.action;
+
+        var params = orderData.payuParams;
+        for (var pKey in params) {
+          if (Object.prototype.hasOwnProperty.call(params, pKey)) {
+            var hiddenField = document.createElement("input");
+            hiddenField.type = "hidden";
+            hiddenField.name = pKey;
+            hiddenField.value = params[pKey];
+            form.appendChild(hiddenField);
+          }
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
+      // Development mode or Razorpay SDK not loaded — complete registration without live checkout
+      if (orderData.isDevelopment || typeof Razorpay === "undefined") {
+        var verifyRes = await fetch(BACKEND_URL + "/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload,
+            razorpay_order_id: orderData.orderId,
+            razorpay_payment_id: "DEMO_PAY_ID_" + Date.now(),
+            razorpay_signature: "DEMO_SIG"
+          })
+        });
+
+        var verifyData = await verifyRes.json();
+        if (verifyRes.ok) {
+          goToStep('step-success');
+          if (verifyData.closed) {
+            disableRegistrations("Registrations are now officially closed.");
+          }
+        } else {
+          showAlertModal(verifyData.message || "Registration failed.");
+          registerBtn.disabled = false;
+          registerBtn.textContent = originalText;
+        }
+        return;
+      }
+
+      // Render Razorpay payment modal
+      var options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Chennimalai Marathon 2026",
+        description: "Registration Fee",
+        order_id: orderData.orderId,
+        prefill: {
+          name: payload.fullName,
+          email: payload.email,
+          contact: payload.phone
+        },
+        handler: async function (response) {
+          var finalPayload = {
+            ...payload,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature
+          };
+
+          try {
+            var verifyRes = await fetch(BACKEND_URL + "/api/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(finalPayload)
+            });
+
+            var verifyData = await verifyRes.json();
+            if (verifyRes.ok) {
+              // Payment verified — registration record updated to Success.
+              goToStep('step-success');
+              if (verifyData.closed) {
+                disableRegistrations("Registrations are now officially closed.");
+              }
+            } else {
+              showAlertModal(verifyData.message || "Payment verification failed.");
+              registerBtn.disabled = false;
+              registerBtn.textContent = originalText;
+            }
+          } catch (err) {
+            console.error("Verification error:", err);
+            showAlertModal("Payment received, but we could not confirm it with the server. Please contact support with your payment ID.");
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalText;
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            // User closed the payment window before paying — mark Pending.
+            reportPaymentPending(payload, "User closed payment window without paying");
+            showAlertModal("Registration incomplete. Your status has been saved as pending — you can complete payment later.");
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalText;
+          }
+        }
+      };
+
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        // Bank / gateway / transaction error — mark Failed.
+        reportPaymentFailure(payload, response.error.description || "Transaction declined");
+        showAlertModal("Payment failed: " + (response.error.description || "Transaction declined"));
+        registerBtn.disabled = false;
+        registerBtn.textContent = originalText;
+      });
+      rzp.open();
 
     } catch (err) {
-      console.error("API Error during gateway issue submission:", err);
-      // Show modal even if network issue occurs so user receives clear notice
-      showGatewayIssueModal();
-    } finally {
+      console.error("Payment initiation error:", err);
+      showAlertModal("Unable to connect to payment server. Please check your connection and try again.");
       registerBtn.disabled = false;
       registerBtn.textContent = originalText;
     }

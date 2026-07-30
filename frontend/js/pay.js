@@ -280,8 +280,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      // Demo / dry-run path when no live Razorpay checkout is available
-      if (orderData.demoMode || typeof Razorpay === "undefined") {
+      // Development / missing Razorpay SDK — complete token payment without live checkout
+      if (orderData.isDevelopment || typeof Razorpay === "undefined") {
         await verifyRazorpayTokenPayment(paymentToken, reg, {
           razorpay_order_id: orderData.orderId,
           razorpay_payment_id: "DEMO_PAY_ID_" + Date.now(),
