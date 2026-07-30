@@ -92,7 +92,13 @@ table { max-width: 100%; }
 .inner-hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10,24,54,0.90) 0%, rgba(10,24,54,0.65) 45%, rgba(10,24,54,0.35) 100%); z-index: 1; }
 .inner-hero-content { position: relative; z-index: 2; max-width: 1680px; margin: 0 auto; padding: 0 40px; width: 100%; color: #fff; }
 .breadcrumb { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 18px; }
-.breadcrumb i { font-size: 12px; margin-right: 4px; }
+.breadcrumb i {
+    font-size: 12px;
+    margin-right: 4px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+}
 .breadcrumb .current { color: var(--orange); }
 .inner-hero h2 { font-size: 52px; font-weight: 800; line-height: 1.05; margin-bottom: 18px; }
 .inner-hero .accent-green { color: #7ed99a; }
@@ -371,14 +377,7 @@ table { max-width: 100%; }
     padding: 26px 40px;
 }
 
-.about-cta .cta-bar-inner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: 36px;
-}
+
 
 .about-hero {
     position: relative;
