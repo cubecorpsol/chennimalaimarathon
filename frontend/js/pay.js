@@ -82,7 +82,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <h3>Payment Already Completed!</h3>
         <p>${escapeHtml(message || "Your registration for Chennimalai Marathon 2026 is confirmed. This unique payment link has been deactivated to prevent duplicate payments.")}</p>
         <a href="index.html" class="btn-pay-now" style="text-decoration: none; max-width: 220px; margin: 0 auto; padding: 12px 20px; font-size: 15px;">
-          <i class="fa-solid fa-house"></i> Return to Homepage
+          <i class="fa-solid fa-house" style="font-size: 13px;"></i> Return to Homepage
         </a>
       </div>
     `;
