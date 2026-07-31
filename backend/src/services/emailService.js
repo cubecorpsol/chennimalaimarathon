@@ -1,5 +1,4 @@
 const nodemailer = require("nodemailer");
-const axios = require("axios");
 
 /**
  * Builds a mobile-responsive HTML email template matching the frontend website design system.
@@ -123,80 +122,34 @@ function buildResponsiveEmailWrapper({ previewText = "", headerSubtitle = "", co
 </html>`;
 }
 
-// GoHighLevel (GHL) API Sender with Automatic Contact Upsert & Tagging
-async function sendViaGHL(recipientData, subject, htmlContent) {
-  const token = process.env.GHL_PRIVATE_INTEGRATION_TOKEN;
-  const locationId = process.env.GHL_LOCATION_ID;
+// Zoho ZeptoMail SMTP transporter, cached across warm serverless invocations.
+let cachedTransporter = null;
 
-  if (!token || !locationId) return false;
+function getTransporter() {
+  const pass = process.env.ZEPTOMAIL_SMTP_PASS;
+  const senderEmail = process.env.ZEPTOMAIL_FROM_ADDRESS || '"Chennimalai Marathon" <noreply@chennimalaimarathon.com>';
 
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Version: "2021-07-28",
-    "Content-Type": "application/json"
-  };
-
-  // Parse recipient information
-  const toEmail = typeof recipientData === "string" ? recipientData : recipientData.email;
-  const fullName = typeof recipientData === "object" && recipientData.fullName ? recipientData.fullName : "Runner";
-  const nameParts = fullName.trim().split(" ");
-  const firstName = nameParts[0] || "Runner";
-  const lastName = nameParts.slice(1).join(" ") || "";
-  const rawPhone = typeof recipientData === "object" ? recipientData.phone || "" : "";
-  const cleanPhone = String(rawPhone).replace(/[^\d+]/g, "").trim();
-
-  // Step 1: Upsert Contact in GHL to get a valid contactId
-  const upsertUrl = "https://services.leadconnectorhq.com/contacts/upsert";
-  const upsertPayload = {
-    locationId: locationId,
-    email: toEmail,
-    firstName: firstName,
-    lastName: lastName,
-    tags: ["Chennimalai Marathon", "Confirmed Runner"]
-  };
-
-  // Only include phone if valid length to prevent GHL API 400 validation errors
-  if (cleanPhone && cleanPhone.length >= 10) {
-    upsertPayload.phone = cleanPhone;
+  if (!pass || pass.startsWith("your_")) {
+    console.error("❌ ZEPTOMAIL_NOT_CONFIGURED: ZEPTOMAIL_SMTP_PASS is missing or still a placeholder. No email will be sent.");
+    return null;
   }
 
-  const upsertRes = await axios.post(upsertUrl, upsertPayload, { headers });
-  const contactId = upsertRes.data?.contact?.id || upsertRes.data?.id || upsertRes.data?.contactId;
-
-  if (!contactId) {
-    throw new Error("Could not retrieve GHL Contact ID during upsert");
+  if (!cachedTransporter) {
+    const port = parseInt(process.env.ZEPTOMAIL_SMTP_PORT || "587", 10);
+    cachedTransporter = nodemailer.createTransport({
+      host: process.env.ZEPTOMAIL_SMTP_HOST || "smtp.zeptomail.in",
+      port,
+      secure: port === 465,
+      // ZeptoMail's SMTP username is the literal string "emailapikey".
+      auth: { user: process.env.ZEPTOMAIL_SMTP_USER || "emailapikey", pass },
+      // Bounded so a hung SMTP socket can never outlive the serverless invocation.
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    });
   }
 
-  // Step 2: Send Email Message using the retrieved contactId
-  const msgUrl = "https://services.leadconnectorhq.com/conversations/messages";
-  const msgPayload = {
-    type: "Email",
-    contactId: contactId,
-    subject: subject,
-    html: htmlContent
-  };
-
-  if (process.env.GHL_FROM_EMAIL) {
-    msgPayload.emailFrom = process.env.GHL_FROM_EMAIL;
-  }
-
-  const msgRes = await axios.post(msgUrl, msgPayload, { headers });
-  return msgRes.status >= 200 && msgRes.status < 300;
-}
-
-// Nodemailer SMTP Transporter (Fallback)
-async function createTransporter() {
-  const account1User = process.env.SMTP_USER_1 || process.env.GMAIL_ACCOUNT_1;
-  const account1Pass = process.env.SMTP_PASS_1 || process.env.GMAIL_APP_PASSWORD_1;
-  if (!account1User || !account1Pass) return null;
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: parseInt(process.env.SMTP_PORT || "587", 10),
-    secure: false,
-    auth: { user: account1User, pass: account1Pass }
-  });
-  return { transporter, senderEmail: account1User };
+  return { transporter: cachedTransporter, senderEmail };
 }
 
 function buildEmailHTML(record, isDev) {
@@ -299,88 +252,25 @@ async function sendRegistrationEmail(record, isDev = false) {
   const subject = `${isDev ? "[DEV] " : ""}Registration Confirmed - Chennimalai Marathon (Bib #${record.tshirtNumber || "N/A"})`;
   const htmlContent = buildEmailHTML(record, isDev);
 
-  // 1. Primary Method: GoHighLevel (GHL) API
-  if (process.env.GHL_PRIVATE_INTEGRATION_TOKEN && process.env.GHL_LOCATION_ID) {
-    try {
-      await sendViaGHL(record, subject, htmlContent);
-      console.log(`✉️ [GHL API] Confirmation email sent to ${record.email}`);
-      return true;
-    } catch (ghlErr) {
-      console.error("❌ GHL_EMAIL_SEND_ERROR:", ghlErr.response?.data || ghlErr.message);
-    }
+  if (!record?.email) {
+    console.error("❌ REGISTRATION_EMAIL_SKIPPED: registration has no email address.");
+    return false;
   }
 
-  // 2. Secondary Method: Fallback to SMTP
-  try {
-    const smtpObj = await createTransporter();
-    if (!smtpObj) {
-      console.log(`✉️ [LOG ONLY] Email dispatched for ${record.email} (Bib: ${record.tshirtNumber})`);
-      return true;
-    }
+  const smtpObj = getTransporter();
+  if (!smtpObj) return false;
 
-    const mailOptions = {
-      from: `"Chennimalai Marathon" <${smtpObj.senderEmail}>`,
+  try {
+    const info = await smtpObj.transporter.sendMail({
+      from: smtpObj.senderEmail,
       to: record.email,
       subject: subject,
       html: htmlContent
-    };
-
-    await smtpObj.transporter.sendMail(mailOptions);
-    console.log(`✉️ [SMTP] Confirmation email sent to ${record.email}`);
+    });
+    console.log(`✉️ [ZEPTOMAIL SMTP] Confirmation email sent to ${record.email} (messageId: ${info.messageId})`);
     return true;
   } catch (err) {
-    console.error("❌ SMTP_EMAIL_SEND_ERROR:", err.message);
-    return false;
-  }
-}
-
-async function sendOTPEmail(email, otp) {
-  const subject = `Your Admin Verification Code: ${otp}`;
-  const contentHtml = `
-    <p style="font-size: 15px; color: #334155; margin-top: 0;">Hello Admin,</p>
-    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-      Your One-Time Password (OTP) for logging into the Chennimalai Marathon Admin Dashboard is:
-    </p>
-    <div style="background: #fff7ed; border: 2px dashed #ffedd5; font-size: 32px; font-weight: 800; letter-spacing: 6px; text-align: center; padding: 18px; border-radius: 10px; color: #ea580c; margin: 24px 0;">
-      ${otp}
-    </div>
-    <div style="background: #f8fafc; border-left: 4px solid #f5a623; padding: 12px 14px; border-radius: 4px; margin-bottom: 20px;">
-      <p style="font-size: 13px; color: #64748b; margin: 0; line-height: 1.5;">
-        ⏱️ <strong>Security Notice:</strong> This OTP will expire in 10 minutes. If you did not request this login, please ignore this email.
-      </p>
-    </div>
-  `;
-
-  const htmlContent = buildResponsiveEmailWrapper({
-    previewText: `Your Admin Verification Code is ${otp}`,
-    headerSubtitle: "Admin OTP Verification",
-    contentHtml
-  });
-
-  if (process.env.GHL_PRIVATE_INTEGRATION_TOKEN && process.env.GHL_LOCATION_ID) {
-    try {
-      await sendViaGHL({ email: email, fullName: "Admin" }, subject, htmlContent);
-      console.log(`🔑 [GHL API] OTP sent to ${email}`);
-      return true;
-    } catch (ghlErr) {
-      console.error("❌ GHL_OTP_ERROR:", ghlErr.response?.data || ghlErr.message);
-    }
-  }
-
-  try {
-    const smtpObj = await createTransporter();
-    console.log(`🔑 [ADMIN OTP DISPATCHED] Email: ${email} | OTP Code: ${otp}`);
-    if (smtpObj) {
-      await smtpObj.transporter.sendMail({
-        from: `"Chennimalai Marathon Admin" <${smtpObj.senderEmail}>`,
-        to: email,
-        subject: subject,
-        html: htmlContent
-      });
-    }
-    return true;
-  } catch (err) {
-    console.error("❌ OTP_EMAIL_ERROR:", err.message);
+    console.error(`❌ ZEPTOMAIL_SMTP_EMAIL_SEND_ERROR for ${record.email}:`, err.message);
     return false;
   }
 }
@@ -472,37 +362,27 @@ async function sendSponsorshipEmail(record, isDev = false) {
   const subject = `${isDev ? "[DEV] " : ""}Sponsorship Confirmed - ${record.companyName} (${record.tier} Sponsor)`;
   const htmlContent = buildSponsorshipEmailHTML(record, isDev);
 
-  if (process.env.GHL_PRIVATE_INTEGRATION_TOKEN && process.env.GHL_LOCATION_ID) {
-    try {
-      await sendViaGHL({ email: record.email, fullName: record.contactPerson, phone: record.phone }, subject, htmlContent);
-      console.log(`✉️ [GHL API] Sponsorship email sent to ${record.email}`);
-      return true;
-    } catch (ghlErr) {
-      console.error("❌ GHL_SPONSORSHIP_EMAIL_ERROR:", ghlErr.response?.data || ghlErr.message);
-    }
+  if (!record?.email) {
+    console.error("❌ SPONSORSHIP_EMAIL_SKIPPED: sponsorship has no email address.");
+    return false;
   }
 
-  try {
-    const smtpObj = await createTransporter();
-    if (!smtpObj) {
-      console.log(`✉️ [LOG ONLY] Sponsorship Email dispatched for ${record.email}`);
-      return true;
-    }
+  const smtpObj = getTransporter();
+  if (!smtpObj) return false;
 
-    const mailOptions = {
-      from: `"Chennimalai Marathon" <${smtpObj.senderEmail}>`,
+  try {
+    const info = await smtpObj.transporter.sendMail({
+      from: smtpObj.senderEmail,
       to: record.email,
       subject: subject,
       html: htmlContent
-    };
-
-    await smtpObj.transporter.sendMail(mailOptions);
-    console.log(`✉️ [SMTP] Sponsorship email sent to ${record.email}`);
+    });
+    console.log(`✉️ [ZEPTOMAIL SMTP] Sponsorship email sent to ${record.email} (messageId: ${info.messageId})`);
     return true;
   } catch (err) {
-    console.error("❌ SMTP_SPONSORSHIP_EMAIL_SEND_ERROR:", err.message);
+    console.error(`❌ ZEPTOMAIL_SMTP_SPONSORSHIP_EMAIL_SEND_ERROR for ${record.email}:`, err.message);
     return false;
   }
 }
 
-module.exports = { sendRegistrationEmail, sendOTPEmail, sendSponsorshipEmail };
+module.exports = { sendRegistrationEmail, sendSponsorshipEmail };

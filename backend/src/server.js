@@ -5,6 +5,7 @@ const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 require("dotenv").config();
 
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
@@ -65,6 +66,56 @@ function validate(data) {
   return null;
 }
 
+
+// On serverless the instance is frozen the moment a response is flushed, which kills any
+// still-pending SMTP/Sheets work. Post-payment side effects must therefore finish BEFORE
+// responding; each one is capped so a slow provider cannot hold the request open.
+const POST_PAYMENT_TASK_TIMEOUT_MS = 12000;
+
+function settleTask(run, label) {
+  let timer;
+  const guard = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      console.error(`⏱️ ${label}_TIMEOUT after ${POST_PAYMENT_TASK_TIMEOUT_MS}ms`);
+      resolve(false);
+    }, POST_PAYMENT_TASK_TIMEOUT_MS);
+  });
+
+  // A post-payment side effect must never reject: the payment already succeeded.
+  const attempt = (async () => run())().catch((err) => {
+    console.error(`❌ ${label}_FAILED:`, err?.message || err);
+    return false;
+  });
+
+  return Promise.race([attempt, guard]).finally(() => clearTimeout(timer));
+}
+
+async function runPostPaymentTasks(tasks) {
+  await Promise.all(tasks.map(({ label, run }) => settleTask(run, label)));
+}
+
+function buildRegistrationSheetData(record, failureReason) {
+  return {
+    timestamp: record.createdAt.toISOString(),
+    fullName: record.fullName, dob: record.dob, age: record.age,
+    participantType: record.participantType, category: record.category,
+    gender: record.gender, phone: record.phone, email: record.email,
+    district: record.district, pincode: record.pincode, tshirtSize: record.tshirtSize,
+    tshirtSelected: record.tshirtSelected, bloodGroup: record.bloodGroup,
+    tshirtNumber: record.tshirtNumber, emergencyContact: record.emergencyContact,
+    registrationFee: record.registrationFee, tshirtFee: record.tshirtFee,
+    pgFee: record.pgFee, totalAmount: record.totalAmount, status: "SUCCESS",
+    failureReason
+  };
+}
+
+async function deliverRegistrationSuccess(record, sheetData) {
+  await runPostPaymentTasks([
+    { label: "SHEETS_APPEND_SUCCESS", run: () => sheets.appendRegistrationSuccess(sheetData) },
+    { label: "SHEETS_APPEND_STATUS", run: () => sheets.appendRegistrationStatus(sheetData) },
+    { label: "REGISTRATION_EMAIL", run: () => emailService.sendRegistrationEmail(record, isDevelopment()) }
+  ]);
+}
 
 // Metadata Routes
 app.get("/api/districts", (req, res) => res.json(DISTRICTS));
@@ -283,6 +334,10 @@ app.post("/api/sponsorship/verify-payment", async (req, res) => {
       release();
     }
 
+    await runPostPaymentTasks([
+      { label: "SPONSORSHIP_EMAIL", run: () => emailService.sendSponsorshipEmail(sponsorship, isDevelopment()) }
+    ]);
+
     res.json({
       success: true,
       sponsorId: sponsorship.sponsorId,
@@ -290,8 +345,6 @@ app.post("/api/sponsorship/verify-payment", async (req, res) => {
       amount: sponsorship.amount,
       tier: sponsorship.tier
     });
-
-    emailService.sendSponsorshipEmail(sponsorship, isDevelopment()).catch(err => console.error("SPONSORSHIP_EMAIL_FAILED", err.message));
   } catch (err) {
     console.error("SPONSORSHIP_VERIFY_ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR", message: "Failed to verify sponsorship payment." });
@@ -584,7 +637,11 @@ app.post("/api/verify-token-payment", async (req, res) => {
     release();
   }
 
-  // Fast response
+  await deliverRegistrationSuccess(
+    updatedRecord,
+    buildRegistrationSheetData(updatedRecord, `Payment ID: ${updatedRecord.razorpayPaymentId}`)
+  );
+
   res.json({
     success: true,
     category: updatedRecord.category,
@@ -594,23 +651,6 @@ app.post("/api/verify-token-payment", async (req, res) => {
     registeredSoFar: newSuccessCount,
     closed
   });
-
-  // Non-blocking async background tasks
-  const sheetData = {
-    timestamp: updatedRecord.createdAt.toISOString(),
-    fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
-    participantType: updatedRecord.participantType, category: updatedRecord.category,
-    gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
-    district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
-    tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
-    tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
-    registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
-    pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
-    failureReason: `Payment ID: ${updatedRecord.razorpayPaymentId}`
-  };
-  sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-  sheets.appendRegistrationStatus(sheetData).catch(() => {});
-  emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("TOKEN_PAYMENT_EMAIL_FAILED", err.message));
 });
 
 
@@ -675,7 +715,9 @@ app.post("/api/payu/callback", async (req, res) => {
       }
 
       if (justCompleted && sponsorship) {
-        emailService.sendSponsorshipEmail(sponsorship, isDevelopment()).catch(err => console.error("PAYU_SPONSORSHIP_EMAIL_FAILED", err.message));
+        await runPostPaymentTasks([
+          { label: "PAYU_SPONSORSHIP_EMAIL", run: () => emailService.sendSponsorshipEmail(sponsorship, isDevelopment()) }
+        ]);
       }
 
       return res.redirect(
@@ -736,21 +778,10 @@ app.post("/api/payu/callback", async (req, res) => {
     }
 
     if (justCompleted && regRecord) {
-      const sheetData = {
-        timestamp: regRecord.createdAt.toISOString(),
-        fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
-        participantType: regRecord.participantType, category: regRecord.category,
-        gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
-        district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
-        tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
-        tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
-        registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
-        pgFee: regRecord.pgFee, totalAmount: regRecord.totalAmount, status: "SUCCESS",
-        failureReason: `PayU ID: ${mihpayid || txnid}`
-      };
-      sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-      sheets.appendRegistrationStatus(sheetData).catch(() => {});
-      emailService.sendRegistrationEmail(regRecord, isDevelopment()).catch(err => console.error("PAYU_EMAIL_SEND_FAILED", err.message));
+      await deliverRegistrationSuccess(
+        regRecord,
+        buildRegistrationSheetData(regRecord, `PayU ID: ${mihpayid || txnid}`)
+      );
     }
 
     return res.redirect(`${successRedirectBase}?status=success&txnid=${encodeURIComponent(txnid)}&bib=${encodeURIComponent(regRecord?.tshirtNumber || "")}&name=${encodeURIComponent(regRecord?.fullName || "")}&email=${encodeURIComponent(regRecord?.email || "")}&category=${encodeURIComponent(regRecord?.category || "")}`);
@@ -822,25 +853,16 @@ app.post("/api/razorpay/webhook", async (req, res) => {
       }
 
       if (updatedRecord) {
-        const sheetData = {
-          timestamp: updatedRecord.createdAt.toISOString(),
-          fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
-          participantType: updatedRecord.participantType, category: updatedRecord.category,
-          gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
-          district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
-          tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
-          tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
-          registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
-          pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
-          failureReason: `Webhook Payment ID: ${paymentId}`
-        };
-        sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-        sheets.appendRegistrationStatus(sheetData).catch(() => {});
-        emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("WEBHOOK_EMAIL_FAILED", err.message));
+        await deliverRegistrationSuccess(
+          updatedRecord,
+          buildRegistrationSheetData(updatedRecord, `Webhook Payment ID: ${paymentId}`)
+        );
       }
 
       if (updatedSponsorship) {
-        emailService.sendSponsorshipEmail(updatedSponsorship, isDevelopment()).catch(err => console.error("WEBHOOK_SPONSORSHIP_EMAIL_FAILED", err.message));
+        await runPostPaymentTasks([
+          { label: "WEBHOOK_SPONSORSHIP_EMAIL", run: () => emailService.sendSponsorshipEmail(updatedSponsorship, isDevelopment()) }
+        ]);
       }
     }
   }
@@ -947,7 +969,11 @@ app.post("/api/register", async (req, res) => {
     release();
   }
 
-  // FAST RESPONSE: Send JSON response IMMEDIATELY
+  await deliverRegistrationSuccess(
+    updatedRecord,
+    buildRegistrationSheetData(updatedRecord, `Payment ID: ${updatedRecord.razorpayPaymentId}`)
+  );
+
   res.json({
     success: true,
     category: updatedRecord.category,
@@ -957,23 +983,6 @@ app.post("/api/register", async (req, res) => {
     registeredSoFar: newSuccessCount,
     closed
   });
-
-  // NON-BLOCKING ASYNC TASKS: Send email & sync Google Sheets in background
-  const sheetData = {
-    timestamp: updatedRecord.createdAt.toISOString(),
-    fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
-    participantType: updatedRecord.participantType, category: updatedRecord.category,
-    gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
-    district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
-    tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
-    tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
-    registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
-    pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
-    failureReason: `Payment ID: ${updatedRecord.razorpayPaymentId}`
-  };
-  sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-  sheets.appendRegistrationStatus(sheetData).catch(() => {});
-  emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("ASYNC_EMAIL_FAILED", err.message));
 });
 
 // Admin routes have been moved to the standalone chennimalaimarathon-admin project.
