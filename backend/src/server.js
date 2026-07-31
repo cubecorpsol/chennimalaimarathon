@@ -75,7 +75,7 @@ app.get("/api/tshirt-sizes", (req, res) => res.json(TSHIRT_SIZES));
 app.get("/api/status", async (req, res) => {
   try {
     const settings = await Settings.findOne() || {
-      adultFee: 500, kidsFee: 300, tshirtPrice: 200, pricingTitle: "Marathon Registration Fees",
+      adultFee: 150, kidsFee: 100, tshirtPrice: 0, pricingTitle: "Marathon Registration Fees",
       maxRegistrations: 1000, isOpen: true, showRemainingSlots: true, paymentGateway: "razorpay",
       ageCutoff: 13
     };
@@ -90,9 +90,9 @@ app.get("/api/status", async (req, res) => {
       maxRegistrations: settings.maxRegistrations,
       remainingSlots: Math.max(0, settings.maxRegistrations - successCount),
       showRemainingSlots: settings.showRemainingSlots,
-      adultFee: settings.adultFee,
-      kidsFee: settings.kidsFee,
-      tshirtPrice: settings.tshirtPrice,
+      adultFee: Number(settings.adultFee ?? 150),
+      kidsFee: Number(settings.kidsFee ?? 100),
+      tshirtPrice: Number(settings.tshirtPrice ?? 0),
       pricingTitle: settings.pricingTitle,
       ageCutoff: settings.ageCutoff || 13,
       paymentGateway: settings.paymentGateway || "razorpay",

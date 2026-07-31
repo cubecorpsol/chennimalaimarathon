@@ -7,9 +7,9 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
 const SettingsSchema = new mongoose.Schema({
-  adultFee: { type: Number, default: 500 },
-  kidsFee: { type: Number, default: 300 },
-  tshirtPrice: { type: Number, default: 200 },
+  adultFee: { type: Number, default: 150 },
+  kidsFee: { type: Number, default: 100 },
+  tshirtPrice: { type: Number, default: 0 },
   pricingTitle: { type: String, default: "Marathon Registration Fees" },
   maxRegistrations: { type: Number, default: 1000 },
   tshirtCounter: { type: Number, default: 11 },
@@ -131,9 +131,9 @@ async function seedInitialData() {
     const settingsCount = await Settings.countDocuments();
     if (settingsCount === 0) {
       await Settings.create({
-        adultFee: 500,
-        kidsFee: 300,
-        tshirtPrice: 200,
+        adultFee: 150,
+        kidsFee: 100,
+        tshirtPrice: 0,
         pricingTitle: "Marathon Registration Fees",
         maxRegistrations: 1000,
         tshirtCounter: 11,
@@ -142,6 +142,15 @@ async function seedInitialData() {
         ageCutoff: 13
       });
       console.log("🌱 [DB SEED] Default Settings initialized.");
+    } else {
+      // Migrate legacy seed defaults (500/300) to current early-bird defaults (150/100)
+      const migrated = await Settings.updateMany(
+        { adultFee: 500, kidsFee: 300 },
+        { $set: { adultFee: 150, kidsFee: 100 } }
+      );
+      if (migrated.modifiedCount > 0) {
+        console.log("🌱 [DB SEED] Migrated legacy fees 500/300 → 150/100.");
+      }
     }
 
     // 2. Seed Default Super Admin

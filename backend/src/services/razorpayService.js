@@ -38,7 +38,7 @@ function calculateAge(dobStr) {
 async function createOrder(req, res) {
   try {
     const settings = await Settings.findOne() || {
-      adultFee: 500, kidsFee: 300, tshirtPrice: 200,
+      adultFee: 150, kidsFee: 100, tshirtPrice: 0,
       maxRegistrations: 1000, isOpen: true, ageCutoff: 13,
       paymentGateway: "razorpay"
     };
@@ -60,9 +60,12 @@ async function createOrder(req, res) {
     const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
     const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
 
-    const tshirtSelected = formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
-    const registrationFee = participantType === "Adult" ? settings.adultFee : settings.kidsFee;
-    const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
+    const tshirtSelected = participantType !== "Kids" && formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
+    const registrationFee = participantType === "Adult"
+      ? Number(settings.adultFee ?? 150)
+      : Number(settings.kidsFee ?? 100);
+    const tshirtPrice = Number(settings.tshirtPrice ?? 0);
+    const tshirtFee = tshirtSelected ? tshirtPrice : 0;
     const subtotal = registrationFee + tshirtFee;
     const pgFee = Number((subtotal * 0.025).toFixed(2));
     const totalAmount = Number((subtotal + pgFee).toFixed(2));

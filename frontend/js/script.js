@@ -71,9 +71,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function updateDynamicPrices(settings) {
     if (!settings) return;
-    var adultFee = settings.adultFee || 500;
-    var kidsFee = settings.kidsFee || 300;
-    var tshirtPrice = settings.tshirtPrice || 200;
+    var adultFee = settings.adultFee ?? 150;
+    var kidsFee = settings.kidsFee ?? 100;
+    var tshirtPrice = Number(settings.tshirtPrice ?? 0);
 
     document.querySelectorAll('.dynamic-entry-fee').forEach(function (el) {
       el.textContent = '₹' + adultFee + ' / ₹' + kidsFee;
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
       el.textContent = '₹' + kidsFee;
     });
     document.querySelectorAll('.dynamic-tshirt-fee').forEach(function (el) {
-      el.textContent = '₹' + tshirtPrice;
+      el.textContent = tshirtPrice > 0 ? ('₹' + tshirtPrice) : 'Complimentary';
     });
   }
 
@@ -148,9 +148,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
 
   var currentSettings = {
-    adultFee: 500,
-    kidsFee: 300,
-    tshirtPrice: 200,
+    adultFee: 150,
+    kidsFee: 100,
+    tshirtPrice: 0,
     pricingTitle: "Marathon Registration Fees",
     maxRegistrations: 1000,
     remainingSlots: 1000,
@@ -171,11 +171,21 @@ document.addEventListener('DOMContentLoaded', function () {
     return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function formatTshirtCharge(amount) {
+    var num = Number(amount) || 0;
+    return num > 0 ? formatRupee(num) : 'Complimentary';
+  }
+
   function updateTshirtHint() {
     var hint = document.getElementById('tshirt-hint');
     if (!hint) return;
     var cutoff = getAgeCutoff();
-    hint.textContent = 'Available only for runners aged above ' + cutoff + ' (7 KM category).';
+    var tshirtPrice = Number(currentSettings.tshirtPrice ?? 0);
+    if (tshirtPrice > 0) {
+      hint.textContent = 'Available only for runners aged above ' + cutoff + ' (7 KM category). Charge: ' + formatRupee(tshirtPrice) + '.';
+    } else {
+      hint.textContent = 'Complimentary for runners aged above ' + cutoff + ' (7 KM category).';
+    }
   }
 
   function updateRegistrationSummary() {
@@ -187,15 +197,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!feeEl && !totalEl) return;
 
     var cutoff = getAgeCutoff();
-    var fee = currentSettings.adultFee || 500;
+    var fee = currentSettings.adultFee ?? 150;
     var isKids = false;
     var dob = dobInput ? parseDOB(dobInput.value) : null;
     if (dob) {
       var age = calculateAge(dob, EVENT_DATE);
       isKids = age <= cutoff;
       fee = isKids
-        ? (currentSettings.kidsFee || 300)
-        : (currentSettings.adultFee || 500);
+        ? (currentSettings.kidsFee ?? 100)
+        : (currentSettings.adultFee ?? 150);
     }
 
     var tshirtSelectEl = document.getElementById('tshirt');
@@ -203,14 +213,15 @@ document.addEventListener('DOMContentLoaded', function () {
       tshirtSelectEl.value !== "" &&
       tshirtSelectEl.value !== "NO" &&
       tshirtSelectEl.value !== "N/A";
-    var tshirtFee = tshirtSelected ? (currentSettings.tshirtPrice || 200) : 0;
+    var tshirtPrice = Number(currentSettings.tshirtPrice ?? 0);
+    var tshirtFee = tshirtSelected ? tshirtPrice : 0;
     var subtotal = fee + tshirtFee;
     var pgFee = Number((subtotal * 0.025).toFixed(2));
     var total = Number((subtotal + pgFee).toFixed(2));
 
     if (feeEl) feeEl.textContent = formatRupee(fee);
-    if (tshirtRow) tshirtRow.style.display = tshirtFee > 0 ? "" : "none";
-    if (tshirtEl) tshirtEl.textContent = formatRupee(tshirtFee);
+    if (tshirtRow) tshirtRow.style.display = tshirtSelected ? "" : "none";
+    if (tshirtEl) tshirtEl.textContent = formatTshirtCharge(tshirtFee);
     if (pgEl) pgEl.textContent = formatRupee(pgFee);
     if (totalEl) totalEl.textContent = formatRupee(total);
   }

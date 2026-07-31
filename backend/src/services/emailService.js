@@ -245,7 +245,7 @@ function buildEmailHTML(record, isDev) {
         </tr>
         <tr>
           <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">T-Shirt Size:</td>
-          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right;">${record.tshirtSize || "N/A"} (${record.tshirtSelected ? 'Included' : 'Not Opted'})</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right;">${record.tshirtSize || "N/A"} (${record.tshirtSelected ? ((record.tshirtFee || 0) > 0 ? 'Included' : 'Complimentary') : 'Not Opted'})</td>
         </tr>
         <tr>
           <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Blood Group:</td>
@@ -268,7 +268,10 @@ function buildEmailHTML(record, isDev) {
         ${tshirtFee > 0 ? `<tr>
           <td class="mobile-stack-cell" style="padding: 4px 0;">T-Shirt Addon Fee:</td>
           <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${tshirtFee.toLocaleString("en-IN")}</td>
-        </tr>` : ""}
+        </tr>` : (record.tshirtSelected ? `<tr>
+          <td class="mobile-stack-cell" style="padding: 4px 0;">T-Shirt Charge:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right; color: #15803d;">Complimentary</td>
+        </tr>` : "")}
         <tr>
           <td class="mobile-stack-cell" style="padding: 4px 0;">Payment Gateway Charges (2.5%):</td>
           <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${pgFee.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>

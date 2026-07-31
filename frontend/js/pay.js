@@ -174,7 +174,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           <span class="label">T-Shirt Addon Fee</span>
           <span class="value">₹${tshirtFeeFormatted}</span>
         </div>`
-      : "";
+      : (reg.tshirtSelected
+        ? `<div class="summary-row">
+          <span class="label">T-Shirt Charge</span>
+          <span class="value" style="color:#15803d;">Complimentary</span>
+        </div>`
+        : "");
 
     container.innerHTML = `
       <div class="summary-card">
@@ -201,7 +206,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
         <div class="summary-row">
           <span class="label">T-Shirt Option</span>
-          <span class="value">${escapeHtml(reg.tshirtSize)} (${reg.tshirtSelected ? "Opted" : "Not Opted"})</span>
+          <span class="value">${escapeHtml(reg.tshirtSize)} (${reg.tshirtSelected ? ((reg.tshirtFee || 0) > 0 ? "Opted" : "Complimentary") : "Not Opted"})</span>
         </div>
         <div class="summary-row">
           <span class="label">Payment Gateway</span>
