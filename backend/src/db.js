@@ -20,6 +20,8 @@ const SettingsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const RegistrationSchema = new mongoose.Schema({
+  tempBibNumber: { type: String, default: "N/A" },
+  permanentBibNumber: { type: String, default: "N/A" },
   tshirtNumber: { type: String, default: "N/A" },
   fullName: { type: String, required: true },
   dob: { type: String, required: true },
@@ -165,6 +167,23 @@ async function seedInitialData() {
         role: "superadmin"
       });
       console.log(`🌱 [DB SEED] Super Admin user created: ${defaultEmail}`);
+    }
+
+    // 3. Backfill legacy tshirtNumber → tempBibNumber for older registrations
+    const backfilled = await Registration.updateMany(
+      {
+        tshirtNumber: { $exists: true, $nin: [null, "", "N/A"] },
+        $or: [
+          { tempBibNumber: { $exists: false } },
+          { tempBibNumber: null },
+          { tempBibNumber: "" },
+          { tempBibNumber: "N/A" }
+        ]
+      },
+      [{ $set: { tempBibNumber: "$tshirtNumber" } }]
+    );
+    if (backfilled.modifiedCount > 0) {
+      console.log(`🌱 [DB SEED] Backfilled tempBibNumber from tshirtNumber for ${backfilled.modifiedCount} registrations.`);
     }
   } catch (err) {
     console.error("❌ DB_SEED_ERROR:", err.message);

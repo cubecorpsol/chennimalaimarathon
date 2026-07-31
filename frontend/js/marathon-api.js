@@ -88,7 +88,8 @@ async function submitRegistration() {
     alert(
       `Registration Successful!\n\n` +
       `Category: ${result.category}\n` +
-      `T-Shirt Number: ${result.tshirtNumber}\n\n` +
+      `Temporary BIB Number: ${result.tempBibNumber || result.tshirtNumber}\n\n` +
+      `Note: This BIB is temporary. Confirmed permanent BIB will be shared two days before the marathon.\n\n` +
       `A confirmation email has been sent to ${fullPayload.email}.`
     );
 

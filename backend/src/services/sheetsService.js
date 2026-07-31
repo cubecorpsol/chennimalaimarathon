@@ -1,5 +1,4 @@
 const { google } = require("googleapis");
-const { RULES } = require("../config");
 
 function getSpreadsheetId() {
   return process.env.GOOGLE_SHEET_ID || "";
@@ -15,6 +14,17 @@ function getAuth() {
     key.replace(/\\n/g, "\n"),
     ["https://www.googleapis.com/auth/spreadsheets"]
   );
+}
+
+function resolveTempBib(record) {
+  if (record.tempBibNumber && record.tempBibNumber !== "N/A") return record.tempBibNumber;
+  if (record.tshirtNumber && record.tshirtNumber !== "N/A") return record.tshirtNumber;
+  return "N/A";
+}
+
+function resolvePermBib(record) {
+  if (record.permanentBibNumber && record.permanentBibNumber !== "N/A") return record.permanentBibNumber;
+  return "N/A";
 }
 
 let cachedClient = null;
@@ -37,7 +47,7 @@ async function appendRegistrationSuccess(record) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
-      range: "Registrations!A:R",
+      range: "Registrations!A:S",
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -56,10 +66,11 @@ async function appendRegistrationSuccess(record) {
           record.tshirtSize || "",
           record.tshirtSelected ? "YES" : "NO",
           record.bloodGroup || "",
-          record.tshirtNumber || "N/A",
+          resolveTempBib(record),
           record.registrationFee || 0,
           record.tshirtFee || 0,
-          record.totalAmount || 0
+          record.totalAmount || 0,
+          resolvePermBib(record)
         ]]
       }
     });
@@ -80,7 +91,7 @@ async function appendRegistrationStatus(record) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
-      range: "'Registration Status'!A:T",
+      range: "'Registration Status'!A:U",
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -99,12 +110,13 @@ async function appendRegistrationStatus(record) {
           record.tshirtSize || "",
           record.tshirtSelected ? "YES" : "NO",
           record.bloodGroup || "",
-          record.tshirtNumber || "N/A",
+          resolveTempBib(record),
           record.emergencyContact || "",
           record.registrationFee || 0,
           record.totalAmount || 0,
           record.status || "PENDING",
-          record.failureReason || ""
+          record.failureReason || "",
+          resolvePermBib(record)
         ]]
       }
     });

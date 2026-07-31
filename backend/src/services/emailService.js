@@ -152,8 +152,22 @@ function getTransporter() {
   return { transporter: cachedTransporter, senderEmail };
 }
 
+function buildRaceLocationHtml() {
+  return `
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #1f6d3f; padding: 14px 16px; border-radius: 8px; margin-bottom: 20px;">
+      <p style="font-size: 13px; color: #0d1f47; margin: 0 0 8px 0; font-weight: 700;">📍 Race Location</p>
+      <p style="font-size: 13px; color: #475569; margin: 0; line-height: 1.6;">
+        All categories start from <strong>Chennimalai Bus Stand</strong>.<br>
+        <strong>Kids:</strong> Finish at Muthayankovil<br>
+        <strong>Adults:</strong> Finish at Jaivikas School
+      </p>
+    </div>`;
+}
+
 function buildEmailHTML(record, isDev) {
-  const bibDisplay = (record.tshirtNumber && record.tshirtNumber !== "N/A") ? `#${record.tshirtNumber}` : "Pending Assignment";
+  const tempBibVal = record.tempBibNumber && record.tempBibNumber !== "N/A" ? record.tempBibNumber : (record.tshirtNumber && record.tshirtNumber !== "N/A" ? record.tshirtNumber : null);
+  const tempBibDisplay = tempBibVal ? `#${tempBibVal}` : "Pending Assignment";
+  const permBibDisplay = (record.permanentBibNumber && record.permanentBibNumber !== "N/A") ? `#${record.permanentBibNumber}` : null;
   const paymentIdDisplay = record.razorpayPaymentId || record.payuMihpayid || record.razorpayOrderId || "N/A";
 
   const regFee = record.registrationFee || 0;
@@ -177,9 +191,13 @@ function buildEmailHTML(record, isDev) {
       </div>
       <table border="0" cellpadding="0" cellspacing="0" width="100%" class="info-table" style="font-size: 14px; color: #334155;">
         <tr>
-          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600; width: 45%;">Official BIB Number:</td>
-          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 800; color: #1f6d3f; text-align: right; font-size: 18px;">${bibDisplay}</td>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600; width: 45%;">Temporary BIB Number:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 800; color: #1f6d3f; text-align: right; font-size: 18px;">${tempBibDisplay}</td>
         </tr>
+        ${permBibDisplay ? `<tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Confirmed Permanent BIB:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 800; color: #2563eb; text-align: right; font-size: 18px;">${permBibDisplay}</td>
+        </tr>` : ''}
         <tr>
           <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Event Category:</td>
           <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right; color: #0d1f47;">${record.category || "N/A"} (${record.participantType || "Runner"})</td>
@@ -236,20 +254,34 @@ function buildEmailHTML(record, isDev) {
       </table>
     </div>
 
+    <!-- Temporary BIB Note Alert -->
+    ${!permBibDisplay ? `<div style="background: #fff8e6; border: 1px solid #ffe58f; border-left: 4px solid #faad14; padding: 14px 16px; border-radius: 8px; margin-bottom: 20px;">
+      <p style="font-size: 13px; color: #8c6b00; margin: 0; line-height: 1.5; font-weight: 600;">
+        📌 <strong>Important Note:</strong> The BIB number assigned currently is temporary. Your confirmed permanent BIB number will be shared two days before the marathon.
+      </p>
+    </div>` : `<div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; padding: 14px 16px; border-radius: 8px; margin-bottom: 20px;">
+      <p style="font-size: 13px; color: #1e40af; margin: 0; line-height: 1.5; font-weight: 600;">
+        ✅ <strong>Confirmed:</strong> Your permanent BIB number has been allocated. Please use <strong>${permBibDisplay}</strong> on race day.
+      </p>
+    </div>`}
+
+    ${buildRaceLocationHtml()}
+
     <p style="font-size: 14px; color: #1e293b; text-align: center; margin-top: 24px; line-height: 1.6;">
       🏃 <strong>See you at the starting line on 30 August 2026 (Flag-off: 05:55 AM)!</strong>
     </p>
   `;
 
   return buildResponsiveEmailWrapper({
-    previewText: `Registration Confirmed! BIB #${record.tshirtNumber || 'Assigned'} - Chennimalai Marathon 2026`,
+    previewText: `Registration Confirmed! Temporary BIB #${tempBibVal || 'Assigned'} - Chennimalai Marathon 2026`,
     headerSubtitle: "Registration Confirmation & Receipt",
     contentHtml
   });
 }
 
 async function sendRegistrationEmail(record, isDev = false) {
-  const subject = `${isDev ? "[DEV] " : ""}Registration Confirmed - Chennimalai Marathon (Bib #${record.tshirtNumber || "N/A"})`;
+  const tempBibVal = record.tempBibNumber && record.tempBibNumber !== "N/A" ? record.tempBibNumber : (record.tshirtNumber && record.tshirtNumber !== "N/A" ? record.tshirtNumber : null);
+  const subject = `${isDev ? "[DEV] " : ""}Registration Confirmed - Chennimalai Marathon (Temporary BIB #${tempBibVal || "N/A"})`;
   const htmlContent = buildEmailHTML(record, isDev);
 
   if (!record?.email) {

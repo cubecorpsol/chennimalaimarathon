@@ -102,16 +102,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderSuccessState(result, reg) {
-    const bib = result.tshirtNumber || "Assigned";
+    const bib = result.tempBibNumber || result.tshirtNumber || "Assigned";
     container.innerHTML = `
       <div class="state-card success">
         <i class="fa-solid fa-circle-check"></i>
         <h3>Payment Successful!</h3>
         <p>Congratulations <strong>${escapeHtml(reg.fullName)}</strong>! Your registration payment for <strong>${escapeHtml(reg.category || result.category || "Marathon")}</strong> has been received successfully.</p>
         
-        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 16px; margin: 20px 0; text-align: center;">
-          <div style="font-size: 12px; color: #166534; font-weight: 700; text-transform: uppercase;">OFFICIAL BIB NUMBER</div>
-          <div style="font-size: 28px; font-weight: 800; color: #15803d; font-family: 'Poppins', sans-serif;">#${escapeHtml(bib)}</div>
+        <div style="background: #fff8e6; border: 1px solid #ffe58f; border-radius: 10px; padding: 18px; margin: 20px 0; text-align: center;">
+          <div style="font-size: 12px; color: #8c6b00; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">TEMPORARY BIB NUMBER</div>
+          <div style="font-size: 28px; font-weight: 800; color: #d97706; font-family: 'Poppins', sans-serif; margin: 4px 0;">#${escapeHtml(bib)}</div>
+          <div style="font-size: 12px; color: #92400e; font-weight: 600; margin-top: 6px;">📌 Note: The BIB number assigned currently is temporary. Your confirmed permanent BIB number will be shared two days before the marathon.</div>
         </div>
 
         <p style="font-size: 13px; color: #64748b; margin-bottom: 24px;">A confirmation receipt email has been dispatched to <strong>${escapeHtml(reg.email || "")}</strong>.</p>

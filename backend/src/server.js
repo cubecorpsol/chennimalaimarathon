@@ -102,6 +102,8 @@ function buildRegistrationSheetData(record, failureReason) {
     gender: record.gender, phone: record.phone, email: record.email,
     district: record.district, pincode: record.pincode, tshirtSize: record.tshirtSize,
     tshirtSelected: record.tshirtSelected, bloodGroup: record.bloodGroup,
+    tempBibNumber: record.tempBibNumber || record.tshirtNumber,
+    permanentBibNumber: record.permanentBibNumber,
     tshirtNumber: record.tshirtNumber, emergencyContact: record.emergencyContact,
     registrationFee: record.registrationFee, tshirtFee: record.tshirtFee,
     pgFee: record.pgFee, totalAmount: record.totalAmount, status: "SUCCESS",
@@ -369,7 +371,7 @@ function isPaymentTokenInvalid(reg) {
 
 async function markRegistrationPaymentSuccess(reg, extras = {}) {
   const settings = await Settings.findOne() || { tshirtCounter: 11, maxRegistrations: 1000 };
-  const needsBib = !reg.tshirtNumber || reg.tshirtNumber === "N/A";
+  const needsBib = (!reg.tempBibNumber || reg.tempBibNumber === "N/A") && (!reg.tshirtNumber || reg.tshirtNumber === "N/A");
 
   if (needsBib) {
     const updatedSettings = await Settings.findOneAndUpdate(
@@ -377,7 +379,9 @@ async function markRegistrationPaymentSuccess(reg, extras = {}) {
       { $inc: { tshirtCounter: 1 } },
       { new: true, upsert: true }
     );
-    reg.tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
+    const assignedTempBib = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
+    reg.tempBibNumber = assignedTempBib;
+    reg.tshirtNumber = assignedTempBib;
   }
 
   reg.paymentStatus = "Success";
@@ -592,7 +596,15 @@ app.post("/api/verify-token-payment", async (req, res) => {
   const existingReg = await Registration.findOne({ paymentToken: token });
   const check = isPaymentTokenInvalid(existingReg);
   if (check.invalid) {
-    if (check.paid) return res.json({ success: true, isPaid: true, category: existingReg.category, tshirtNumber: existingReg.tshirtNumber, totalAmount: existingReg.totalAmount });
+    if (check.paid) return res.json({
+      success: true,
+      isPaid: true,
+      category: existingReg.category,
+      tempBibNumber: existingReg.tempBibNumber || existingReg.tshirtNumber,
+      tshirtNumber: existingReg.tshirtNumber,
+      permanentBibNumber: existingReg.permanentBibNumber,
+      totalAmount: existingReg.totalAmount
+    });
     if (check.expired) return res.status(400).json({ error: "EXPIRED_TOKEN", message: check.message });
     return res.status(404).json({ error: "INVALID_TOKEN", message: check.message });
   }
@@ -646,7 +658,9 @@ app.post("/api/verify-token-payment", async (req, res) => {
     success: true,
     category: updatedRecord.category,
     participantType: updatedRecord.participantType,
+    tempBibNumber: updatedRecord.tempBibNumber || updatedRecord.tshirtNumber,
     tshirtNumber: updatedRecord.tshirtNumber,
+    permanentBibNumber: updatedRecord.permanentBibNumber,
     totalAmount: updatedRecord.totalAmount,
     registeredSoFar: newSuccessCount,
     closed
@@ -885,7 +899,9 @@ app.post("/api/register", async (req, res) => {
         success: true,
         category: existingReg.category,
         participantType: existingReg.participantType,
+        tempBibNumber: existingReg.tempBibNumber || existingReg.tshirtNumber,
         tshirtNumber: existingReg.tshirtNumber,
+        permanentBibNumber: existingReg.permanentBibNumber,
         totalAmount: existingReg.totalAmount,
         registeredSoFar: successCount,
         closed: successCount >= settings.maxRegistrations
@@ -978,7 +994,9 @@ app.post("/api/register", async (req, res) => {
     success: true,
     category: updatedRecord.category,
     participantType: updatedRecord.participantType,
+    tempBibNumber: updatedRecord.tempBibNumber || updatedRecord.tshirtNumber,
     tshirtNumber: updatedRecord.tshirtNumber,
+    permanentBibNumber: updatedRecord.permanentBibNumber,
     totalAmount: updatedRecord.totalAmount,
     registeredSoFar: newSuccessCount,
     closed

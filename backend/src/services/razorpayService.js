@@ -126,7 +126,8 @@ async function createOrder(req, res) {
         gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
         district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
         tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
-        tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
+        tempBibNumber: "N/A", permanentBibNumber: "N/A", tshirtNumber: "N/A",
+        emergencyContact: regDoc.emergencyContact,
         registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
         status: "PENDING", failureReason: regDoc.failureReason
       }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
@@ -210,7 +211,8 @@ async function createOrder(req, res) {
       gender: regDoc.gender, phone: regDoc.phone, email: regDoc.email,
       district: regDoc.district, pincode: regDoc.pincode, tshirtSize: regDoc.tshirtSize,
       tshirtSelected: regDoc.tshirtSelected, bloodGroup: regDoc.bloodGroup,
-      tshirtNumber: "N/A", emergencyContact: regDoc.emergencyContact,
+      tempBibNumber: "N/A", permanentBibNumber: "N/A", tshirtNumber: "N/A",
+      emergencyContact: regDoc.emergencyContact,
       registrationFee: regDoc.registrationFee, totalAmount: regDoc.totalAmount,
       status: "PENDING", failureReason: regDoc.failureReason
     }).catch(err => console.warn("Google Sheets status sync caught:", err.message));
