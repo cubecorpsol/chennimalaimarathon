@@ -63,7 +63,9 @@ async function createOrder(req, res) {
     const tshirtSelected = formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
     const registrationFee = participantType === "Adult" ? settings.adultFee : settings.kidsFee;
     const tshirtFee = tshirtSelected ? settings.tshirtPrice : 0;
-    const totalAmount = registrationFee + tshirtFee;
+    const subtotal = registrationFee + tshirtFee;
+    const pgFee = Number((subtotal * 0.025).toFixed(2));
+    const totalAmount = Number((subtotal + pgFee).toFixed(2));
 
     const activeGateway = settings.paymentGateway || "razorpay";
 
@@ -106,6 +108,7 @@ async function createOrder(req, res) {
         emergencyContact: formData.emergencyContact || "",
         registrationFee,
         tshirtFee,
+        pgFee,
         totalAmount,
         paymentStatus: "Pending",
         paymentGateway: "payu",
@@ -145,6 +148,7 @@ async function createOrder(req, res) {
         totalAmount,
         registrationFee,
         tshirtFee,
+        pgFee,
         participantType,
         category
       });
@@ -152,7 +156,7 @@ async function createOrder(req, res) {
 
     // Default: Razorpay Order Creation
     let orderId = `order_dev_${Date.now()}`;
-    let amountPaise = totalAmount * 100;
+    let amountPaise = Math.round(totalAmount * 100);
 
     if (isProduction() && hasRazorpayCredentials()) {
       const options = {
@@ -187,6 +191,7 @@ async function createOrder(req, res) {
       emergencyContact: formData.emergencyContact || "",
       registrationFee,
       tshirtFee,
+      pgFee,
       totalAmount,
       paymentStatus: "Pending",
       paymentGateway: "razorpay",
@@ -218,6 +223,7 @@ async function createOrder(req, res) {
       totalAmount,
       registrationFee,
       tshirtFee,
+      pgFee,
       participantType,
       category
     });

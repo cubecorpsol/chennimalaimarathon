@@ -203,6 +203,12 @@ function buildEmailHTML(record, isDev) {
   const bibDisplay = (record.tshirtNumber && record.tshirtNumber !== "N/A") ? `#${record.tshirtNumber}` : "Pending Assignment";
   const paymentIdDisplay = record.razorpayPaymentId || record.payuMihpayid || record.razorpayOrderId || "N/A";
 
+  const regFee = record.registrationFee || 0;
+  const tshirtFee = record.tshirtFee || 0;
+  const subtotal = regFee + tshirtFee;
+  const pgFee = record.pgFee !== undefined && record.pgFee > 0 ? record.pgFee : Number((subtotal * 0.025).toFixed(2));
+  const totalAmount = record.totalAmount || Number((subtotal + pgFee).toFixed(2));
+
   const contentHtml = `
     ${isDev ? '<div style="background:#fff3cd;color:#856404;padding:12px;margin-bottom:18px;border-radius:8px;font-weight:bold;font-size:13px;">⚠️ DEVELOPMENT MODE TEST EMAIL</div>' : ''}
     
@@ -257,15 +263,19 @@ function buildEmailHTML(record, isDev) {
       <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size: 14px; color: #166534;">
         <tr>
           <td class="mobile-stack-cell" style="padding: 4px 0;">Registration Fee:</td>
-          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${record.registrationFee || 0}</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${regFee.toLocaleString("en-IN")}</td>
         </tr>
-        <tr>
+        ${tshirtFee > 0 ? `<tr>
           <td class="mobile-stack-cell" style="padding: 4px 0;">T-Shirt Addon Fee:</td>
-          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${record.tshirtFee || 0}</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${tshirtFee.toLocaleString("en-IN")}</td>
+        </tr>` : ""}
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 4px 0;">Payment Gateway Charges (2.5%):</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${pgFee.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
         </tr>
         <tr style="border-top: 1px dashed #86efac;">
           <td class="mobile-stack-cell" style="padding: 10px 0 0 0; font-weight: 800; font-size: 16px;">Total Amount Paid:</td>
-          <td class="mobile-stack-cell mobile-val-right" style="padding: 10px 0 0 0; font-weight: 800; font-size: 18px; text-align: right; color: #15803d;">₹${record.totalAmount || 0}</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 10px 0 0 0; font-weight: 800; font-size: 18px; text-align: right; color: #15803d;">₹${totalAmount.toLocaleString("en-IN")}</td>
         </tr>
       </table>
     </div>

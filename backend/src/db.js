@@ -37,6 +37,7 @@ const RegistrationSchema = new mongoose.Schema({
   emergencyContact: { type: String, required: true },
   registrationFee: { type: Number, default: 0 },
   tshirtFee: { type: Number, default: 0 },
+  pgFee: { type: Number, default: 0 },
   totalAmount: { type: Number, default: 0 },
   paymentStatus: {
     type: String,
