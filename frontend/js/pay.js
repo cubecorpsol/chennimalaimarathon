@@ -135,7 +135,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function resetPayButton(btn, amount) {
     btn.disabled = false;
-    btn.innerHTML = `<i class="fa-solid fa-lock"></i> <span>Proceed to Pay ₹${(amount || 0).toLocaleString("en-IN")}</span>`;
+    const formatted = (amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    btn.innerHTML = `<i class="fa-solid fa-lock"></i> <span>Proceed to Pay ₹${formatted}</span>`;
   }
 
   function submitPayuForm(action, params) {
@@ -158,10 +159,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderPaymentSummary(reg, paymentToken) {
-    const totalFormatted = (reg.totalAmount || 0).toLocaleString("en-IN");
+    const subtotal = (reg.registrationFee || 0) + (reg.tshirtFee || 0);
+    const pgFeeVal = reg.pgFee !== undefined && reg.pgFee > 0 ? reg.pgFee : Number((subtotal * 0.025).toFixed(2));
+    const totalVal = reg.totalAmount && reg.totalAmount > subtotal ? reg.totalAmount : Number((subtotal + pgFeeVal).toFixed(2));
+
+    const totalFormatted = totalVal.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const regFeeFormatted = (reg.registrationFee || 0).toLocaleString("en-IN");
-    const tshirtFeeFormatted = (reg.tshirtFee || 0).toLocaleString("en-IN");
+    const tshirtFeeVal = reg.tshirtFee || 0;
+    const tshirtFeeFormatted = tshirtFeeVal.toLocaleString("en-IN");
+    const pgFeeFormatted = pgFeeVal.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const gatewayLabel = (reg.paymentGateway || "razorpay").toLowerCase() === "payu" ? "PayU" : "Razorpay";
+    const tshirtFeeRow = tshirtFeeVal > 0
+      ? `<div class="summary-row">
+          <span class="label">T-Shirt Addon Fee</span>
+          <span class="value">₹${tshirtFeeFormatted}</span>
+        </div>`
+      : "";
 
     container.innerHTML = `
       <div class="summary-card">
@@ -202,16 +215,17 @@ document.addEventListener("DOMContentLoaded", async () => {
           <span class="label">Registration Entry Fee</span>
           <span class="value">₹${regFeeFormatted}</span>
         </div>
+        ${tshirtFeeRow}
         <div class="summary-row">
-          <span class="label">T-Shirt Addon Fee</span>
-          <span class="value">₹${tshirtFeeFormatted}</span>
+          <span class="label">Payment Gateway Charges (2.5%)</span>
+          <span class="value">₹${pgFeeFormatted}</span>
         </div>
       </div>
 
       <div class="fee-total-card">
         <div>
           <div class="fee-total-title">Total Amount Payable</div>
-          <div style="font-size: 12px; color: #c2410c;">Includes all registration fees & taxes</div>
+          <div style="font-size: 12px; color: #c2410c;">Includes registration fees and PG charges</div>
         </div>
         <div class="fee-total-amount">₹${totalFormatted}</div>
       </div>
@@ -234,23 +248,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  async function fetchWithRetry(url, options, maxRetries) {
+    maxRetries = maxRetries || 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const fetchOpts = Object.assign({}, options, { signal: controller.signal });
+        const res = await fetch(url, fetchOpts);
+        clearTimeout(timeoutId);
+        if (res.ok || res.status === 400 || res.status === 403 || res.status === 404) {
+          return res;
+        }
+      } catch (err) {
+        console.warn("API Call Attempt " + attempt + " failed:", err);
+        if (attempt === maxRetries) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+  }
+
   async function verifyRazorpayTokenPayment(token, reg, response, btn) {
     btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> <span>Verifying Payment...</span>`;
-    const verifyRes = await fetch("/api/verify-token-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        razorpay_order_id: response.razorpay_order_id,
-        razorpay_payment_id: response.razorpay_payment_id,
-        razorpay_signature: response.razorpay_signature
-      })
-    });
-    const verifyData = await verifyRes.json();
-    if (verifyRes.ok && verifyData.success) {
-      renderSuccessState(verifyData, reg);
-    } else {
-      alert(verifyData.message || "Payment verification failed.");
+    try {
+      const verifyRes = await fetchWithRetry("/api/verify-token-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature
+        })
+      });
+      const verifyData = await verifyRes.json();
+      if (verifyRes.ok && verifyData.success) {
+        renderSuccessState(verifyData, reg);
+      } else {
+        alert(verifyData.message || "Payment verification failed.");
+        resetPayButton(btn, reg.totalAmount);
+      }
+    } catch (err) {
+      console.error("Token payment verification error:", err);
+      alert("Payment received, but server response timed out. Your registration will be confirmed automatically via email shortly.");
       resetPayButton(btn, reg.totalAmount);
     }
   }

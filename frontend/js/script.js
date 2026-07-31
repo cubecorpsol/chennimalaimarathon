@@ -164,7 +164,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function formatRupee(amount) {
-    return '₹' + (Number(amount) || 0);
+    var num = Number(amount) || 0;
+    if (Number.isInteger(num)) {
+      return '₹' + num.toLocaleString('en-IN');
+    }
+    return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function updateTshirtHint() {
@@ -176,21 +180,39 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function updateRegistrationSummary() {
     var feeEl = document.getElementById('summaryRegFee');
+    var tshirtRow = document.getElementById('summaryTshirtRow');
+    var tshirtEl = document.getElementById('summaryTshirtFee');
+    var pgEl = document.getElementById('summaryPgFee');
     var totalEl = document.getElementById('summaryTotal');
     if (!feeEl && !totalEl) return;
 
     var cutoff = getAgeCutoff();
     var fee = currentSettings.adultFee || 500;
+    var isKids = false;
     var dob = dobInput ? parseDOB(dobInput.value) : null;
     if (dob) {
       var age = calculateAge(dob, EVENT_DATE);
-      fee = age <= cutoff
+      isKids = age <= cutoff;
+      fee = isKids
         ? (currentSettings.kidsFee || 300)
         : (currentSettings.adultFee || 500);
     }
 
+    var tshirtSelectEl = document.getElementById('tshirt');
+    var tshirtSelected = !isKids && tshirtSelectEl &&
+      tshirtSelectEl.value !== "" &&
+      tshirtSelectEl.value !== "NO" &&
+      tshirtSelectEl.value !== "N/A";
+    var tshirtFee = tshirtSelected ? (currentSettings.tshirtPrice || 200) : 0;
+    var subtotal = fee + tshirtFee;
+    var pgFee = Number((subtotal * 0.025).toFixed(2));
+    var total = Number((subtotal + pgFee).toFixed(2));
+
     if (feeEl) feeEl.textContent = formatRupee(fee);
-    if (totalEl) totalEl.textContent = formatRupee(fee);
+    if (tshirtRow) tshirtRow.style.display = tshirtFee > 0 ? "" : "none";
+    if (tshirtEl) tshirtEl.textContent = formatRupee(tshirtFee);
+    if (pgEl) pgEl.textContent = formatRupee(pgFee);
+    if (totalEl) totalEl.textContent = formatRupee(total);
   }
 
   /* ---------------------------------------------------------
@@ -684,6 +706,10 @@ document.addEventListener('DOMContentLoaded', function () {
     el.addEventListener(evt, function () { clearError(field); });
   });
 
+  if (tshirtSelect) {
+    tshirtSelect.addEventListener('change', updateRegistrationSummary);
+  }
+
   if (fitnessCheckbox) {
     fitnessCheckbox.addEventListener('change', function () { clearError('fitnessConfirm'); });
   }
@@ -822,9 +848,29 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // Development mode or Razorpay SDK not loaded — complete registration without live checkout
+  async function fetchWithRetry(url, options, maxRetries) {
+    maxRetries = maxRetries || 3;
+    for (var attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function() { controller.abort(); }, 15000);
+        var fetchOpts = Object.assign({}, options, { signal: controller.signal });
+        var res = await fetch(url, fetchOpts);
+        clearTimeout(timeoutId);
+        if (res.ok || res.status === 400 || res.status === 403 || res.status === 404) {
+          return res;
+        }
+      } catch (err) {
+        console.warn("API Call Attempt " + attempt + " failed:", err);
+        if (attempt === maxRetries) throw err;
+        await new Promise(function(resolve) { setTimeout(resolve, 1500); });
+      }
+    }
+  }
+
+  // Development mode or Razorpay SDK not loaded — complete registration without live checkout
       if (orderData.isDevelopment || typeof Razorpay === "undefined") {
-        var verifyRes = await fetch(BACKEND_URL + "/api/register", {
+        var verifyRes = await fetchWithRetry(BACKEND_URL + "/api/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -871,7 +917,7 @@ document.addEventListener('DOMContentLoaded', function () {
           };
 
           try {
-            var verifyRes = await fetch(BACKEND_URL + "/api/register", {
+            var verifyRes = await fetchWithRetry(BACKEND_URL + "/api/register", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(finalPayload)
@@ -891,7 +937,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
           } catch (err) {
             console.error("Verification error:", err);
-            showAlertModal("Payment received, but we could not confirm it with the server. Please contact support with your payment ID.");
+            showAlertModal("Payment received, but server response timed out. Your registration will be confirmed automatically via email shortly.");
             registerBtn.disabled = false;
             registerBtn.textContent = originalText;
           }

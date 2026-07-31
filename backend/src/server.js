@@ -174,6 +174,13 @@ app.get("/api/payment-request/:token", async (req, res) => {
     const settings = await Settings.findOne() || { paymentGateway: "razorpay" };
     const activeGateway = settings.paymentGateway || reg.paymentGateway || "razorpay";
 
+    const regFee = reg.registrationFee || 0;
+    const tshirtFee = reg.tshirtFee || 0;
+    const subtotal = regFee + tshirtFee;
+    const computedPgFee = Number((subtotal * 0.025).toFixed(2));
+    const pgFee = reg.pgFee !== undefined && reg.pgFee > 0 ? reg.pgFee : computedPgFee;
+    const totalAmount = reg.totalAmount && reg.totalAmount > subtotal ? reg.totalAmount : Number((subtotal + pgFee).toFixed(2));
+
     res.json({
       success: true,
       registration: {
@@ -185,9 +192,10 @@ app.get("/api/payment-request/:token", async (req, res) => {
         participantType: reg.participantType,
         tshirtSize: reg.tshirtSize,
         tshirtSelected: reg.tshirtSelected,
-        registrationFee: reg.registrationFee || 0,
-        tshirtFee: reg.tshirtFee || 0,
-        totalAmount: reg.totalAmount || 0,
+        registrationFee: regFee,
+        tshirtFee: tshirtFee,
+        pgFee: pgFee,
+        totalAmount: totalAmount,
         paymentGateway: activeGateway
       }
     });
@@ -220,7 +228,17 @@ app.post("/api/create-order-for-token", async (req, res) => {
     }
 
     const activeGateway = settings.paymentGateway || reg.paymentGateway || "razorpay";
-    const totalAmount = Number(reg.totalAmount) || 0;
+    const regFee = reg.registrationFee || 0;
+    const tshirtFee = reg.tshirtFee || 0;
+    const subtotal = regFee + tshirtFee;
+    const computedPgFee = Number((subtotal * 0.025).toFixed(2));
+    const pgFee = reg.pgFee !== undefined && reg.pgFee > 0 ? reg.pgFee : computedPgFee;
+    const totalAmount = reg.totalAmount && reg.totalAmount > subtotal ? reg.totalAmount : Number((subtotal + pgFee).toFixed(2));
+
+    if (reg.pgFee !== pgFee || reg.totalAmount !== totalAmount) {
+      reg.pgFee = pgFee;
+      reg.totalAmount = totalAmount;
+    }
 
     if (activeGateway === "payu") {
       const payuTxnId = `PAYU_TXN_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
@@ -314,126 +332,130 @@ app.post("/api/create-order-for-token", async (req, res) => {
 
 // Verify Razorpay payment for token-based checkout (updates existing registration only)
 app.post("/api/verify-token-payment", async (req, res) => {
+  const data = req.body || {};
+  const token = data.token;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
+
+  if (!token) {
+    return res.status(400).json({ error: "MISSING_TOKEN", message: "Payment token is required." });
+  }
+  if (!razorpay_order_id) {
+    return res.status(400).json({ error: "MISSING_ORDER", message: "Razorpay order id is required." });
+  }
+
+  const existingReg = await Registration.findOne({ paymentToken: token });
+  const check = isPaymentTokenInvalid(existingReg);
+  if (check.invalid) {
+    if (check.paid) return res.json({ success: true, isPaid: true, category: existingReg.category, tshirtNumber: existingReg.tshirtNumber, totalAmount: existingReg.totalAmount });
+    if (check.expired) return res.status(400).json({ error: "EXPIRED_TOKEN", message: check.message });
+    return res.status(404).json({ error: "INVALID_TOKEN", message: check.message });
+  }
+
+  if (existingReg.razorpayOrderId && existingReg.razorpayOrderId !== razorpay_order_id) {
+    return res.status(400).json({ error: "ORDER_MISMATCH", message: "Payment order does not match this payment link." });
+  }
+
+  const isValid = isDevelopment() ||
+    razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+
+  if (!isValid) {
+    await Registration.findOneAndUpdate(
+      { _id: existingReg._id },
+      { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
+    );
+    return res.status(400).json({
+      error: "PAYMENT_VERIFICATION_FAILED",
+      message: "Security check failed. Transaction signature invalid."
+    });
+  }
+
+  let updatedRecord;
+  let newSuccessCount = 0;
+  let closed = false;
+
   const release = await mutex.acquire();
   try {
-    const data = req.body || {};
-    const token = data.token;
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
-
-    if (!token) {
-      return res.status(400).json({ error: "MISSING_TOKEN", message: "Payment token is required." });
-    }
-    if (!razorpay_order_id) {
-      return res.status(400).json({ error: "MISSING_ORDER", message: "Razorpay order id is required." });
-    }
-
-    const reg = await Registration.findOne({ paymentToken: token });
-    const check = isPaymentTokenInvalid(reg);
-    if (check.invalid) {
-      if (check.paid) return res.status(400).json({ error: "ALREADY_PAID", message: check.message });
-      if (check.expired) return res.status(400).json({ error: "EXPIRED_TOKEN", message: check.message });
-      return res.status(404).json({ error: "INVALID_TOKEN", message: check.message });
-    }
-
-    if (reg.razorpayOrderId && reg.razorpayOrderId !== razorpay_order_id) {
-      return res.status(400).json({ error: "ORDER_MISMATCH", message: "Payment order does not match this payment link." });
-    }
-
-    const isValid = isDevelopment() ||
-      razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-
-    if (!isValid) {
-      await Registration.findOneAndUpdate(
-        { _id: reg._id },
-        { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
-      );
-      return res.status(400).json({
-        error: "PAYMENT_VERIFICATION_FAILED",
-        message: "Security check failed. Transaction signature invalid."
-      });
-    }
-
-    const { reg: updated, newSuccessCount, closed } = await markRegistrationPaymentSuccess(reg, {
+    const resSuccess = await markRegistrationPaymentSuccess(existingReg, {
       razorpayPaymentId: razorpay_payment_id || "DEMO_PAY_ID",
       razorpaySignature: razorpay_signature || "DEMO_SIG",
       paymentGateway: "razorpay",
       failureReason: "Payment Successful"
     });
-
-    const sheetData = {
-      timestamp: updated.createdAt.toISOString(),
-      fullName: updated.fullName, dob: updated.dob, age: updated.age,
-      participantType: updated.participantType, category: updated.category,
-      gender: updated.gender, phone: updated.phone, email: updated.email,
-      district: updated.district, pincode: updated.pincode, tshirtSize: updated.tshirtSize,
-      tshirtSelected: updated.tshirtSelected, bloodGroup: updated.bloodGroup,
-      tshirtNumber: updated.tshirtNumber, emergencyContact: updated.emergencyContact,
-      registrationFee: updated.registrationFee, tshirtFee: updated.tshirtFee,
-      totalAmount: updated.totalAmount, status: "SUCCESS",
-      failureReason: `Payment ID: ${updated.razorpayPaymentId}`
-    };
-    sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-    sheets.appendRegistrationStatus(sheetData).catch(() => {});
-
-    try {
-      await emailService.sendRegistrationEmail(updated, isDevelopment());
-    } catch (emailErr) {
-      console.error("TOKEN_PAYMENT_EMAIL_FAILED", emailErr.message);
-    }
-
-    return res.json({
-      success: true,
-      category: updated.category,
-      participantType: updated.participantType,
-      tshirtNumber: updated.tshirtNumber,
-      totalAmount: updated.totalAmount,
-      registeredSoFar: newSuccessCount,
-      closed
-    });
+    updatedRecord = resSuccess.reg;
+    newSuccessCount = resSuccess.newSuccessCount;
+    closed = resSuccess.closed;
   } catch (err) {
     console.error("VERIFY_TOKEN_PAYMENT_ERROR", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   } finally {
     release();
   }
+
+  // Fast response
+  res.json({
+    success: true,
+    category: updatedRecord.category,
+    participantType: updatedRecord.participantType,
+    tshirtNumber: updatedRecord.tshirtNumber,
+    totalAmount: updatedRecord.totalAmount,
+    registeredSoFar: newSuccessCount,
+    closed
+  });
+
+  // Non-blocking async background tasks
+  const sheetData = {
+    timestamp: updatedRecord.createdAt.toISOString(),
+    fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
+    participantType: updatedRecord.participantType, category: updatedRecord.category,
+    gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
+    district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
+    tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
+    tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
+    registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
+    pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
+    failureReason: `Payment ID: ${updatedRecord.razorpayPaymentId}`
+  };
+  sheets.appendRegistrationSuccess(sheetData).catch(() => {});
+  sheets.appendRegistrationStatus(sheetData).catch(() => {});
+  emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("TOKEN_PAYMENT_EMAIL_FAILED", err.message));
 });
 
 
 // PayU Callback Route (HTTP POST Redirect from PayU Hosted Checkout)
 app.post("/api/payu/callback", async (req, res) => {
-  const release = await mutex.acquire();
-  try {
-    const data = req.body || {};
-    const { salt } = payuService.getPayuCredentials();
-    const isValidHash = payuService.verifyPayuResponseHash(data, salt);
+  const data = req.body || {};
+  const { salt } = payuService.getPayuCredentials();
+  const isValidHash = payuService.verifyPayuResponseHash(data, salt);
 
-    const txnid = data.txnid || "";
-    const mihpayid = data.mihpayid || "";
-    const status = String(data.status || "").toLowerCase();
-    const errorMsg = data.error_Message || data.unmappedstatus || "Transaction declined";
-    const isTokenPay = String(data.udf2 || "") === "token_pay";
+  const txnid = data.txnid || "";
+  const mihpayid = data.mihpayid || "";
+  const status = String(data.status || "").toLowerCase();
+  const errorMsg = data.error_Message || data.unmappedstatus || "Transaction declined";
+  const isTokenPay = String(data.udf2 || "") === "token_pay";
 
-    const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
-    const successRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
-    const failRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
+  const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
+  const successRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
+  const failRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
 
-    if (!isValidHash && !isDevelopment()) {
-      console.error("PAYU_CALLBACK_HASH_INVALID:", data);
-      if (txnid) {
-        await Registration.findOneAndUpdate(
-          { payuTxnId: txnid },
-          { paymentStatus: "Failed", failureReason: "PayU callback hash signature verification failed" }
-        );
-      }
-      return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent("Security signature verification failed")}`);
+  if (!isValidHash && !isDevelopment()) {
+    console.error("PAYU_CALLBACK_HASH_INVALID:", data);
+    if (txnid) {
+      await Registration.findOneAndUpdate(
+        { payuTxnId: txnid },
+        { paymentStatus: "Failed", failureReason: "PayU callback hash signature verification failed" }
+      );
     }
+    return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent("Security signature verification failed")}`);
+  }
 
-    if (status === "success") {
-      let regRecord = await Registration.findOne({ payuTxnId: txnid });
-      let justCompleted = false;
+  if (status === "success") {
+    let regRecord;
+    let justCompleted = false;
 
+    const release = await mutex.acquire();
+    try {
+      regRecord = await Registration.findOne({ payuTxnId: txnid });
       if (!regRecord) {
-        // Do not invent a registration from PayU callback alone for token payments
         if (isTokenPay) {
           return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent("Registration not found for this payment")}`);
         }
@@ -467,54 +489,154 @@ app.post("/api/payu/callback", async (req, res) => {
         regRecord.paymentTokenUsed = true;
         await regRecord.save();
       }
+    } catch (err) {
+      console.error("PAYU_CALLBACK_MUTEX_ERROR", err);
+    } finally {
+      release();
+    }
 
-      if (justCompleted) {
+    if (justCompleted && regRecord) {
+      const sheetData = {
+        timestamp: regRecord.createdAt.toISOString(),
+        fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
+        participantType: regRecord.participantType, category: regRecord.category,
+        gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
+        district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
+        tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
+        tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
+        registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
+        pgFee: regRecord.pgFee, totalAmount: regRecord.totalAmount, status: "SUCCESS",
+        failureReason: `PayU ID: ${mihpayid || txnid}`
+      };
+      sheets.appendRegistrationSuccess(sheetData).catch(() => {});
+      sheets.appendRegistrationStatus(sheetData).catch(() => {});
+      emailService.sendRegistrationEmail(regRecord, isDevelopment()).catch(err => console.error("PAYU_EMAIL_SEND_FAILED", err.message));
+    }
+
+    return res.redirect(`${successRedirectBase}?status=success&txnid=${encodeURIComponent(txnid)}&bib=${encodeURIComponent(regRecord?.tshirtNumber || "")}&name=${encodeURIComponent(regRecord?.fullName || "")}&email=${encodeURIComponent(regRecord?.email || "")}&category=${encodeURIComponent(regRecord?.category || "")}`);
+  } else {
+    if (txnid) {
+      await Registration.findOneAndUpdate(
+        { payuTxnId: txnid },
+        { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg }
+      );
+    }
+    return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent(errorMsg)}`);
+  }
+});
+
+// Razorpay Webhook Endpoint for Automatic Async Payment Confirmation
+app.post("/api/razorpay/webhook", async (req, res) => {
+  const signature = req.headers["x-razorpay-signature"];
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+  if (webhookSecret && signature) {
+    const expectedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      console.warn("⚠️ RAZORPAY_WEBHOOK_SIGNATURE_MISMATCH");
+      return res.status(400).send("Invalid Webhook Signature");
+    }
+  }
+
+  const event = req.body?.event;
+  const payload = req.body?.payload || {};
+
+  if (event === "payment.captured" || event === "order.paid") {
+    const paymentEntity = payload.payment?.entity || {};
+    const orderId = paymentEntity.order_id || payload.order?.entity?.id;
+    const paymentId = paymentEntity.id;
+
+    if (orderId) {
+      let updatedRecord = null;
+      const release = await mutex.acquire();
+      try {
+        let reg = await Registration.findOne({ razorpayOrderId: orderId });
+        if (reg && reg.paymentStatus !== "Success") {
+          const resSuccess = await markRegistrationPaymentSuccess(reg, {
+            razorpayPaymentId: paymentId || "WEBHOOK_PAY_ID",
+            paymentGateway: "razorpay",
+            failureReason: "Payment Successful (Razorpay Webhook)"
+          });
+          updatedRecord = resSuccess.reg;
+        }
+      } catch (err) {
+        console.error("WEBHOOK_PROCESSING_ERROR", err);
+      } finally {
+        release();
+      }
+
+      if (updatedRecord) {
         const sheetData = {
-          timestamp: regRecord.createdAt.toISOString(),
-          fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
-          participantType: regRecord.participantType, category: regRecord.category,
-          gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
-          district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
-          tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
-          tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
-          registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
-          totalAmount: regRecord.totalAmount, status: "SUCCESS",
-          failureReason: `PayU ID: ${mihpayid || txnid}`
+          timestamp: updatedRecord.createdAt.toISOString(),
+          fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
+          participantType: updatedRecord.participantType, category: updatedRecord.category,
+          gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
+          district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
+          tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
+          tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
+          registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
+          pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
+          failureReason: `Webhook Payment ID: ${paymentId}`
         };
-
         sheets.appendRegistrationSuccess(sheetData).catch(() => {});
         sheets.appendRegistrationStatus(sheetData).catch(() => {});
-
-        try {
-          await emailService.sendRegistrationEmail(regRecord, isDevelopment());
-        } catch (e) {
-          console.error("PAYU_EMAIL_SEND_FAILED", e.message);
-        }
+        emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("WEBHOOK_EMAIL_FAILED", err.message));
       }
-
-      return res.redirect(`${successRedirectBase}?status=success&txnid=${encodeURIComponent(txnid)}&bib=${encodeURIComponent(regRecord.tshirtNumber || "")}&name=${encodeURIComponent(regRecord.fullName || "")}&email=${encodeURIComponent(regRecord.email || "")}&category=${encodeURIComponent(regRecord.category || "")}`);
-    } else {
-      if (txnid) {
-        await Registration.findOneAndUpdate(
-          { payuTxnId: txnid },
-          { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg }
-        );
-      }
-      return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent(errorMsg)}`);
     }
-  } catch (err) {
-    console.error("PAYU_CALLBACK_ERROR", err);
-    return res.status(500).send("Internal Server Error handling PayU payment status");
-  } finally {
-    release();
   }
+
+  return res.status(200).json({ status: "ok" });
 });
 
 // Main Public Registration Verification Endpoint
 app.post("/api/register", async (req, res) => {
+  const data = req.body || {};
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
+
+  // 1. Idempotency Check: if order is already marked Success, return immediately
+  if (razorpay_order_id) {
+    const existingReg = await Registration.findOne({ razorpayOrderId: razorpay_order_id });
+    if (existingReg && existingReg.paymentStatus === "Success") {
+      const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
+      const settings = await Settings.findOne() || { maxRegistrations: 1000 };
+      return res.json({
+        success: true,
+        category: existingReg.category,
+        participantType: existingReg.participantType,
+        tshirtNumber: existingReg.tshirtNumber,
+        totalAmount: existingReg.totalAmount,
+        registeredSoFar: successCount,
+        closed: successCount >= settings.maxRegistrations
+      });
+    }
+  }
+
+  const isValid = isDevelopment() ||
+    razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+
+  if (!isValid) {
+    if (razorpay_order_id) {
+      await Registration.findOneAndUpdate(
+        { razorpayOrderId: razorpay_order_id },
+        { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
+      );
+    }
+    return res.status(400).json({
+      error: "PAYMENT_VERIFICATION_FAILED",
+      message: "Security check failed. Transaction signature invalid."
+    });
+  }
+
+  let updatedRecord;
+  let newSuccessCount = 0;
+  let closed = false;
+
   const release = await mutex.acquire();
   try {
-    const data = req.body || {};
     const settings = await Settings.findOne() || { maxRegistrations: 1000, isOpen: true, tshirtCounter: 11 };
     const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
 
@@ -525,54 +647,9 @@ app.post("/api/register", async (req, res) => {
       });
     }
 
-    const missingField = validate(data);
-    if (missingField) return res.status(400).json({ error: "MISSING_FIELD", field: missingField });
-
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
-
-    // Verify Signature unless in DryRun/Demo mode
-    const isValid = isDevelopment() ||
-      razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-
-    if (!isValid) {
-      if (razorpay_order_id) {
-        await Registration.findOneAndUpdate(
-          { razorpayOrderId: razorpay_order_id },
-          { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
-        );
-      }
-      return res.status(400).json({
-        error: "PAYMENT_VERIFICATION_FAILED",
-        message: "Security check failed. Transaction signature invalid."
-      });
-    }
-
-    // Atomic Bib Number increment in MongoDB Settings
-    const updatedSettings = await Settings.findOneAndUpdate(
-      {},
-      { $inc: { tshirtCounter: 1 } },
-      { new: true, upsert: true }
-    );
-
-    const tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
-
-    // Find and update MongoDB Registration — never invent a new record when an order id is present
     let regRecord;
     if (razorpay_order_id) {
-      regRecord = await Registration.findOneAndUpdate(
-        { razorpayOrderId: razorpay_order_id },
-        {
-          paymentStatus: "Success",
-          paymentTokenUsed: true,
-          tshirtNumber,
-          razorpayPaymentId: razorpay_payment_id || "DEMO_PAY_ID",
-          razorpaySignature: razorpay_signature || "DEMO_SIG",
-          failureReason: "Payment Successful",
-          updatedAt: new Date()
-        },
-        { new: true }
-      );
-
+      regRecord = await Registration.findOne({ razorpayOrderId: razorpay_order_id });
       if (!regRecord) {
         return res.status(404).json({
           error: "ORDER_NOT_FOUND",
@@ -580,69 +657,67 @@ app.post("/api/register", async (req, res) => {
         });
       }
     } else {
-      const emailLower = String(data.email).trim().toLowerCase();
+      const emailLower = String(data.email || "").trim().toLowerCase();
       const age = parseInt(data.age || 20, 10);
       const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
       const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
 
       regRecord = await Registration.create({
-        fullName: data.fullName, dob: data.dob, age,
-        participantType, category, gender: data.gender, phone: data.phone,
-        email: emailLower, district: data.district, pincode: data.pincode,
-        tshirtSize: participantType === "Kids" ? "N/A" : (data.tshirtSize || "M"), tshirtSelected: participantType !== "Kids" && data.tshirtSelected !== false && data.tshirtSelected !== "false",
-        bloodGroup: data.bloodGroup, emergencyContact: data.emergencyContact,
-        tshirtNumber, paymentStatus: "Success", paymentTokenUsed: true,
-        razorpayOrderId: `order_${Date.now()}`,
-        razorpayPaymentId: razorpay_payment_id || `pay_${Date.now()}`,
-        razorpaySignature: razorpay_signature || "N/A"
+        fullName: data.fullName || "Runner", dob: data.dob || "01/01/2000", age,
+        participantType, category, gender: data.gender || "others", phone: data.phone || "",
+        email: emailLower, district: data.district || "", pincode: data.pincode || "",
+        tshirtSize: participantType === "Kids" ? "N/A" : (data.tshirtSize || "M"),
+        tshirtSelected: participantType !== "Kids" && data.tshirtSelected !== false && data.tshirtSelected !== "false",
+        bloodGroup: data.bloodGroup || "O+", emergencyContact: data.emergencyContact || "",
+        tshirtNumber: "N/A", paymentStatus: "Pending",
+        razorpayOrderId: `order_${Date.now()}`
       });
     }
 
-    const newSuccessCount = await Registration.countDocuments({ paymentStatus: "Success" });
-    if (newSuccessCount >= settings.maxRegistrations) {
-      await Settings.updateOne({}, { isOpen: false });
-    }
-
-    // Synchronize to Google Sheets (Safe Try-Catch so Sheets never blocks DB)
-    const sheetData = {
-      timestamp: regRecord.createdAt.toISOString(),
-      fullName: regRecord.fullName, dob: regRecord.dob, age: regRecord.age,
-      participantType: regRecord.participantType, category: regRecord.category,
-      gender: regRecord.gender, phone: regRecord.phone, email: regRecord.email,
-      district: regRecord.district, pincode: regRecord.pincode, tshirtSize: regRecord.tshirtSize,
-      tshirtSelected: regRecord.tshirtSelected, bloodGroup: regRecord.bloodGroup,
-      tshirtNumber: regRecord.tshirtNumber, emergencyContact: regRecord.emergencyContact,
-      registrationFee: regRecord.registrationFee, tshirtFee: regRecord.tshirtFee,
-      totalAmount: regRecord.totalAmount, status: "SUCCESS",
-      failureReason: `Payment ID: ${regRecord.razorpayPaymentId}`
-    };
-
-    sheets.appendRegistrationSuccess(sheetData).catch(() => {});
-    sheets.appendRegistrationStatus(sheetData).catch(() => {});
-
-    // Trigger Confirmation Email with complete pricing breakdown
-    try {
-      await emailService.sendRegistrationEmail(regRecord, isDevelopment());
-    } catch (emailErr) {
-      console.error("EMAIL_SEND_FAILED", emailErr.message);
-    }
-
-    return res.json({
-      success: true,
-      category: regRecord.category,
-      participantType: regRecord.participantType,
-      tshirtNumber: regRecord.tshirtNumber,
-      totalAmount: regRecord.totalAmount,
-      registeredSoFar: newSuccessCount,
-      closed: newSuccessCount >= settings.maxRegistrations
+    const resSuccess = await markRegistrationPaymentSuccess(regRecord, {
+      razorpayPaymentId: razorpay_payment_id || "DEMO_PAY_ID",
+      razorpaySignature: razorpay_signature || "DEMO_SIG",
+      paymentGateway: "razorpay",
+      failureReason: "Payment Successful"
     });
 
+    updatedRecord = resSuccess.reg;
+    newSuccessCount = resSuccess.newSuccessCount;
+    closed = resSuccess.closed;
   } catch (err) {
     console.error("REGISTER_ERROR", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   } finally {
     release();
   }
+
+  // FAST RESPONSE: Send JSON response IMMEDIATELY
+  res.json({
+    success: true,
+    category: updatedRecord.category,
+    participantType: updatedRecord.participantType,
+    tshirtNumber: updatedRecord.tshirtNumber,
+    totalAmount: updatedRecord.totalAmount,
+    registeredSoFar: newSuccessCount,
+    closed
+  });
+
+  // NON-BLOCKING ASYNC TASKS: Send email & sync Google Sheets in background
+  const sheetData = {
+    timestamp: updatedRecord.createdAt.toISOString(),
+    fullName: updatedRecord.fullName, dob: updatedRecord.dob, age: updatedRecord.age,
+    participantType: updatedRecord.participantType, category: updatedRecord.category,
+    gender: updatedRecord.gender, phone: updatedRecord.phone, email: updatedRecord.email,
+    district: updatedRecord.district, pincode: updatedRecord.pincode, tshirtSize: updatedRecord.tshirtSize,
+    tshirtSelected: updatedRecord.tshirtSelected, bloodGroup: updatedRecord.bloodGroup,
+    tshirtNumber: updatedRecord.tshirtNumber, emergencyContact: updatedRecord.emergencyContact,
+    registrationFee: updatedRecord.registrationFee, tshirtFee: updatedRecord.tshirtFee,
+    pgFee: updatedRecord.pgFee, totalAmount: updatedRecord.totalAmount, status: "SUCCESS",
+    failureReason: `Payment ID: ${updatedRecord.razorpayPaymentId}`
+  };
+  sheets.appendRegistrationSuccess(sheetData).catch(() => {});
+  sheets.appendRegistrationStatus(sheetData).catch(() => {});
+  emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("ASYNC_EMAIL_FAILED", err.message));
 });
 
 // Admin routes have been moved to the standalone chennimalaimarathon-admin project.
