@@ -1115,3 +1115,362 @@ document.addEventListener('DOMContentLoaded', function () {
     if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
   });
 });
+
+/* =========================================================
+   EVENT SPONSORSHIP FORM & PUBLIC SPONSORS WALL
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', function () {
+  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function sanitizeUrl(url) {
+    var trimmed = String(url || "").trim();
+    if (!trimmed) return "";
+    try {
+      var parsed = new URL(trimmed, window.location.origin);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+    } catch (e) {}
+    return "";
+  }
+
+  // Handle PayU / gateway return on sponsorship pages
+  (function checkSponsorshipReturnStatus() {
+    var path = (window.location.pathname || "").toLowerCase();
+    if (!path.includes("sponsor")) return;
+    var urlParams = new URLSearchParams(window.location.search);
+    var statusParam = urlParams.get("status");
+    if (!statusParam) return;
+
+    if (statusParam === "success") {
+      var company = urlParams.get("company") || "your organization";
+      var sponsorId = urlParams.get("sponsorId") || "";
+      var msg = "Sponsorship Payment Confirmed! Thank you " + company + " for supporting Chennimalai Marathon 2026.";
+      if (sponsorId) msg += " Sponsor ID: " + sponsorId + ".";
+      msg += " Official receipt has been sent to your email.";
+      if (typeof showAlertModal === "function") showAlertModal(msg);
+      else alert(msg);
+    } else if (statusParam === "failed") {
+      var reason = urlParams.get("reason") || "Transaction declined";
+      if (typeof showAlertModal === "function") showAlertModal("Sponsorship payment failed: " + reason);
+      else alert("Sponsorship payment failed: " + reason);
+    }
+
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  })();
+
+  // 1. Fetch & Render Public Sponsors Wall (on Sponsors, Home, and Prizes pages)
+  async function fetchPublicSponsors() {
+    var wallContainers = [
+      document.getElementById('publicSponsorsWall'),
+      document.getElementById('homeSponsorsWall'),
+      document.getElementById('prizesSponsorsWall')
+    ].filter(Boolean);
+
+    if (!wallContainers.length) return;
+
+    try {
+      var res = await fetch(BACKEND_URL + "/api/sponsors");
+      var data = await res.json();
+
+      wallContainers.forEach(function (container) {
+        if (!data.success || !data.sponsors || !data.sponsors.length) {
+          container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 30px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
+              <i class="fa-solid fa-handshake" style="font-size: 32px; color: #94a3b8; margin-bottom: 8px;"></i>
+              <h4 style="font-size: 16px; color: #334155; margin-bottom: 4px;">Sponsorship Opportunities Open</h4>
+              <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Become our early partner and get featured here.</p>
+              <a href="sponsorship.html" class="btn-register" style="display: inline-block; padding: 8px 18px; font-size: 13px;"><i class="fa-solid fa-plus"></i> Become a Sponsor</a>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = "";
+        data.sponsors.forEach(function (sp) {
+          var card = document.createElement("div");
+          card.className = "sponsor-card";
+          var safeTier = escapeHtml(sp.tier || "Custom");
+          var safeCompany = escapeHtml(sp.companyName || "Sponsor");
+          var safeContact = escapeHtml(sp.contactPerson || "");
+          var safeWebsite = sanitizeUrl(sp.website);
+          var websiteHtml = safeWebsite
+            ? `<a href="${escapeHtml(safeWebsite)}" target="_blank" rel="noopener noreferrer" style="font-size: 12px; color: var(--green); text-decoration: underline; margin-top: 6px; display: inline-block;"><i class="fa-solid fa-globe"></i> Visit Website</a>`
+            : "";
+
+          card.innerHTML = `
+            <span class="sponsor-badge badge-${safeTier}">${safeTier} Sponsor</span>
+            <h4 style="font-size: 18px; font-weight: 700; color: var(--navy); margin: 6px 0 2px;">${safeCompany}</h4>
+            <div style="font-size: 13px; color: #64748b;">${safeContact}</div>
+            ${websiteHtml}
+          `;
+          container.appendChild(card);
+        });
+      });
+    } catch (err) {
+      console.warn("Public sponsors fetch error:", err);
+    }
+  }
+
+  fetchPublicSponsors();
+
+  // 2. Sponsorship Form Handling
+  var spForm = document.getElementById('sponsorshipForm');
+  var spSubmitBtn = document.getElementById('sponsorSubmitBtn');
+  if (!spForm || !spSubmitBtn) return;
+
+  var selectedTier = "Gold";
+  var selectedAmount = 25000;
+
+  var tierBoxes = document.querySelectorAll('.tier-option-box');
+  var customGroup = document.getElementById('customAmountGroup');
+  var customInput = document.getElementById('spCustomAmount');
+
+  function updateSpSummary() {
+    var amount = selectedTier === "Custom" ? (Number(customInput.value) || 0) : selectedAmount;
+    var spSummaryAmount = document.getElementById('spSummaryAmount');
+    var spSummaryTotal = document.getElementById('spSummaryTotal');
+    var format = '₹' + amount.toLocaleString('en-IN');
+    if (spSummaryAmount) spSummaryAmount.textContent = format;
+    if (spSummaryTotal) spSummaryTotal.textContent = format;
+  }
+
+  tierBoxes.forEach(function (box) {
+    box.addEventListener('click', function () {
+      tierBoxes.forEach(function (b) { b.classList.remove('selected'); });
+      box.classList.add('selected');
+
+      selectedTier = box.getAttribute('data-tier');
+      selectedAmount = Number(box.getAttribute('data-amount')) || 0;
+
+      if (selectedTier === "Custom") {
+        if (customGroup) customGroup.style.display = "block";
+      } else {
+        if (customGroup) customGroup.style.display = "none";
+      }
+      updateSpSummary();
+    });
+  });
+
+  if (customInput) {
+    customInput.addEventListener('input', updateSpSummary);
+  }
+
+  function showSpError(id, msg) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = msg;
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.add('has-error');
+  }
+
+  function clearSpError(id) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = '';
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.remove('has-error');
+  }
+
+  ['spCompanyName', 'spContactPerson', 'spPhone', 'spEmail', 'spCustomAmount'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() { clearSpError(id); });
+  });
+
+  var spConfirm = document.getElementById('spConfirm');
+  if (spConfirm) {
+    spConfirm.addEventListener('change', function() { clearSpError('spConfirm'); });
+  }
+
+  async function handleSponsorshipSubmission() {
+    var companyName = document.getElementById('spCompanyName').value.trim();
+    var contactPerson = document.getElementById('spContactPerson').value.trim();
+    var phone = document.getElementById('spPhone').value.trim();
+    var email = document.getElementById('spEmail').value.trim();
+    var designation = document.getElementById('spDesignation').value.trim();
+    var gstin = document.getElementById('spGstin').value.trim();
+    var website = document.getElementById('spWebsite').value.trim();
+    var message = document.getElementById('spMessage').value.trim();
+
+    var isValid = true;
+
+    if (!companyName) { showSpError('spCompanyName', 'Company name is required.'); isValid = false; }
+    if (!contactPerson) { showSpError('spContactPerson', 'Contact person name is required.'); isValid = false; }
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) { showSpError('spPhone', 'Enter a valid 10 digit mobile number.'); isValid = false; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showSpError('spEmail', 'Enter a valid email address.'); isValid = false; }
+
+    var finalAmount = selectedTier === "Custom" ? Number(customInput.value) : selectedAmount;
+    if (selectedTier === "Custom" && (!finalAmount || finalAmount < 1000)) {
+      showSpError('spCustomAmount', 'Enter a valid amount (minimum ₹1,000).');
+      isValid = false;
+    }
+
+    if (!spConfirm.checked) {
+      showSpError('spConfirm', 'Please accept the sponsorship terms to continue.');
+      isValid = false;
+    }
+
+    if (!isValid) return;
+
+    var originalText = spSubmitBtn.textContent;
+    spSubmitBtn.disabled = true;
+    spSubmitBtn.textContent = "Processing Payment...";
+
+    var payload = {
+      companyName: companyName,
+      contactPerson: contactPerson,
+      phone: phone,
+      email: email,
+      designation: designation,
+      gstin: gstin,
+      website: website,
+      tier: selectedTier,
+      amount: finalAmount,
+      message: message
+    };
+
+    try {
+      var orderRes = await fetch(BACKEND_URL + "/api/sponsorship/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      var orderData = await orderRes.json();
+
+      if (!orderRes.ok || !orderData.success) {
+        if (typeof showAlertModal === "function") showAlertModal(orderData.message || "Failed to initialize payment.");
+        else alert(orderData.message || "Failed to initialize payment.");
+        spSubmitBtn.disabled = false;
+        spSubmitBtn.textContent = originalText;
+        return;
+      }
+
+      // Handle PayU Hosted Checkout Form POST
+      if (orderData.gateway === "payu" && orderData.payuParams) {
+        var form = document.createElement("form");
+        form.method = "POST";
+        form.action = orderData.action;
+
+        var params = orderData.payuParams;
+        for (var pKey in params) {
+          if (Object.prototype.hasOwnProperty.call(params, pKey)) {
+            var hiddenField = document.createElement("input");
+            hiddenField.type = "hidden";
+            hiddenField.name = pKey;
+            hiddenField.value = params[pKey];
+            form.appendChild(hiddenField);
+          }
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
+      // Dev Mode or Razorpay SDK missing fallback
+      if (orderData.isDevelopment || typeof Razorpay === "undefined") {
+        var verifyRes = await fetch(BACKEND_URL + "/api/sponsorship/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sponsorshipId: orderData.sponsorshipId,
+            razorpay_order_id: orderData.orderId,
+            razorpay_payment_id: "DEMO_SPN_PAY_" + Date.now(),
+            razorpay_signature: "DEMO_SIG"
+          })
+        });
+
+        var verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success) {
+          if (typeof showAlertModal === "function") {
+            showAlertModal("🎉 Sponsorship Payment Confirmed! Thank you for supporting Chennimalai Marathon 2026. Official receipt has been sent to your email.");
+          } else {
+            alert("Sponsorship Payment Confirmed!");
+          }
+          spForm.reset();
+          fetchPublicSponsors();
+        } else {
+          if (typeof showAlertModal === "function") showAlertModal(verifyData.message || "Payment verification failed.");
+        }
+        spSubmitBtn.disabled = false;
+        spSubmitBtn.textContent = originalText;
+        return;
+      }
+
+      // Razorpay Modal Checkout
+      var options = {
+        key: orderData.key,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Chennimalai Marathon 2026",
+        description: selectedTier + " Sponsorship Contribution",
+        order_id: orderData.orderId,
+        prefill: {
+          name: contactPerson + " (" + companyName + ")",
+          email: email,
+          contact: phone
+        },
+        handler: async function (response) {
+          try {
+            var verifyRes = await fetch(BACKEND_URL + "/api/sponsorship/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sponsorshipId: orderData.sponsorshipId,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+
+            var verifyData = await verifyRes.json();
+            if (verifyRes.ok && verifyData.success) {
+              if (typeof showAlertModal === "function") {
+                showAlertModal("🎉 Sponsorship Payment Confirmed! Thank you for supporting Chennimalai Marathon 2026. Official receipt has been sent to your email.");
+              } else {
+                alert("Sponsorship Payment Confirmed!");
+              }
+              spForm.reset();
+              fetchPublicSponsors();
+            } else {
+              if (typeof showAlertModal === "function") showAlertModal(verifyData.message || "Payment verification failed.");
+            }
+          } catch (err) {
+            console.error("Verification error:", err);
+            if (typeof showAlertModal === "function") showAlertModal("Payment received. Official receipt will be emailed shortly.");
+          } finally {
+            spSubmitBtn.disabled = false;
+            spSubmitBtn.textContent = originalText;
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            spSubmitBtn.disabled = false;
+            spSubmitBtn.textContent = originalText;
+          }
+        }
+      };
+
+      var rzp = new Razorpay(options);
+      rzp.open();
+
+    } catch (err) {
+      console.error("Sponsorship error:", err);
+      if (typeof showAlertModal === "function") showAlertModal("Unable to connect to payment server. Please try again.");
+      spSubmitBtn.disabled = false;
+      spSubmitBtn.textContent = originalText;
+    }
+  }
+
+  spSubmitBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    handleSponsorshipSubmission();
+  });
+});

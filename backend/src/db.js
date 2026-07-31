@@ -71,6 +71,42 @@ const Settings = mongoose.model("Settings", SettingsSchema);
 const Registration = mongoose.model("Registration", RegistrationSchema);
 const AdminUser = mongoose.model("AdminUser", AdminUserSchema);
 
+const SponsorshipSchema = new mongoose.Schema({
+  sponsorId: { type: String, default: "N/A" },
+  companyName: { type: String, required: true },
+  contactPerson: { type: String, required: true },
+  phone: { type: String, required: true },
+  email: { type: String, required: true, index: true },
+  designation: { type: String, default: "" },
+  tier: {
+    type: String,
+    enum: ["Title", "Gold", "Silver", "Bronze", "Custom"],
+    default: "Gold"
+  },
+  amount: { type: Number, required: true },
+  gstin: { type: String, default: "" },
+  website: { type: String, default: "" },
+  logoUrl: { type: String, default: "" },
+  message: { type: String, default: "" },
+  paymentStatus: {
+    type: String,
+    enum: ["Pending", "Success", "Failed", "Cancelled"],
+    default: "Pending",
+    index: true
+  },
+  paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" },
+  razorpayOrderId: { type: String, default: "" },
+  razorpayPaymentId: { type: String, default: "" },
+  razorpaySignature: { type: String, default: "" },
+  payuTxnId: { type: String, default: "" },
+  payuMihpayid: { type: String, default: "" },
+  paymentGatewayResponse: { type: mongoose.Schema.Types.Mixed, default: {} },
+  failureReason: { type: String, default: "" },
+  isApproved: { type: Boolean, default: true }
+}, { timestamps: true });
+
+const Sponsorship = mongoose.model("Sponsorship", SponsorshipSchema);
+
 async function connectDB() {
   const mongoURI = process.env.DATABASE_URL;
   if (!mongoURI) {
@@ -130,5 +166,7 @@ module.exports = {
   connectDB,
   Settings,
   Registration,
-  AdminUser
+  AdminUser,
+  Sponsorship
 };
+

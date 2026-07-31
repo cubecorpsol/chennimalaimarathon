@@ -382,4 +382,124 @@ async function sendOTPEmail(email, otp) {
   }
 }
 
-module.exports = { sendRegistrationEmail, sendOTPEmail };
+function buildSponsorshipEmailHTML(record, isDev) {
+  const paymentIdDisplay = record.razorpayPaymentId || record.payuMihpayid || record.razorpayOrderId || "N/A";
+  const amount = record.amount || 0;
+
+  const contentHtml = `
+    ${isDev ? '<div style="background:#fff3cd;color:#856404;padding:12px;margin-bottom:18px;border-radius:8px;font-weight:bold;font-size:13px;">⚠️ DEVELOPMENT MODE TEST EMAIL</div>' : ''}
+    
+    <p style="font-size: 15px; color: #1e293b; margin-top: 0;">Dear <strong>${record.contactPerson || "Sponsor"}</strong> (${record.companyName}),</p>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+      🤝 <strong>Thank you for your generous sponsorship!</strong> We have successfully received your payment for the <strong>Chennimalai Marathon 2026</strong>.
+    </p>
+
+    <!-- Confirmed Sponsorship Details Card -->
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <div style="font-size: 13px; font-weight: 700; color: #0d1f47; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #f5a623; padding-bottom: 8px; margin-bottom: 12px;">
+        📜 Official Sponsorship Receipt
+      </div>
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" class="info-table" style="font-size: 14px; color: #334155;">
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600; width: 45%;">Sponsor ID:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 800; color: #1f6d3f; text-align: right; font-size: 16px;">${record.sponsorId || "N/A"}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Company / Brand Name:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right; color: #0d1f47;">${record.companyName}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Contact Person:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right;">${record.contactPerson} (${record.designation || 'Representative'})</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Sponsorship Tier:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right; color: #f5a623;">${record.tier} Sponsor</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Email Address:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right; word-break: break-all;">${record.email}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Phone Number:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;">${record.phone}</td>
+        </tr>
+        ${record.gstin ? `<tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">GSTIN:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right; font-family: monospace;">${record.gstin}</td>
+        </tr>` : ''}
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Payment Transaction ID:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 600; text-align: right; font-family: monospace;">${paymentIdDisplay}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Total Paid Summary -->
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-size: 14px; color: #166534;">
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 4px 0;">Sponsorship Amount:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right;">₹${amount.toLocaleString("en-IN")}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 4px 0;">Payment Gateway Charges:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 4px 0; font-weight: 600; text-align: right; color: #16a34a;">₹0 (Waived)</td>
+        </tr>
+        <tr style="border-top: 1px dashed #86efac;">
+          <td class="mobile-stack-cell" style="padding: 10px 0 0 0; font-weight: 800; font-size: 16px;">Total Amount Paid:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 10px 0 0 0; font-weight: 800; font-size: 18px; text-align: right; color: #15803d;">₹${amount.toLocaleString("en-IN")}</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="font-size: 14px; color: #1e293b; text-align: center; margin-top: 24px; line-height: 1.6;">
+      🌟 Our event team will reach out to you shortly regarding brand collateral, logo placement, and VIP arrangements.
+    </p>
+  `;
+
+  return buildResponsiveEmailWrapper({
+    previewText: `Sponsorship Confirmed! ${record.companyName} - Chennimalai Marathon 2026`,
+    headerSubtitle: "Sponsorship Confirmation & Receipt",
+    contentHtml
+  });
+}
+
+async function sendSponsorshipEmail(record, isDev = false) {
+  const subject = `${isDev ? "[DEV] " : ""}Sponsorship Confirmed - ${record.companyName} (${record.tier} Sponsor)`;
+  const htmlContent = buildSponsorshipEmailHTML(record, isDev);
+
+  if (process.env.GHL_PRIVATE_INTEGRATION_TOKEN && process.env.GHL_LOCATION_ID) {
+    try {
+      await sendViaGHL({ email: record.email, fullName: record.contactPerson, phone: record.phone }, subject, htmlContent);
+      console.log(`✉️ [GHL API] Sponsorship email sent to ${record.email}`);
+      return true;
+    } catch (ghlErr) {
+      console.error("❌ GHL_SPONSORSHIP_EMAIL_ERROR:", ghlErr.response?.data || ghlErr.message);
+    }
+  }
+
+  try {
+    const smtpObj = await createTransporter();
+    if (!smtpObj) {
+      console.log(`✉️ [LOG ONLY] Sponsorship Email dispatched for ${record.email}`);
+      return true;
+    }
+
+    const mailOptions = {
+      from: `"Chennimalai Marathon" <${smtpObj.senderEmail}>`,
+      to: record.email,
+      subject: subject,
+      html: htmlContent
+    };
+
+    await smtpObj.transporter.sendMail(mailOptions);
+    console.log(`✉️ [SMTP] Sponsorship email sent to ${record.email}`);
+    return true;
+  } catch (err) {
+    console.error("❌ SMTP_SPONSORSHIP_EMAIL_SEND_ERROR:", err.message);
+    return false;
+  }
+}
+
+module.exports = { sendRegistrationEmail, sendOTPEmail, sendSponsorshipEmail };

@@ -11,7 +11,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
 
-const { connectDB, Settings, Registration, AdminUser } = require("./db");
+const { connectDB, Settings, Registration, AdminUser, Sponsorship } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
@@ -102,6 +102,199 @@ app.get("/api/status", async (req, res) => {
   } catch (err) {
     console.error("STATUS_ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// Public Sponsors List
+app.get("/api/sponsors", async (req, res) => {
+  try {
+    const sponsors = await Sponsorship.find({ paymentStatus: "Success", isApproved: true })
+      .select("companyName contactPerson tier amount website logoUrl message createdAt")
+      .sort({ amount: -1, createdAt: -1 });
+    res.json({ success: true, sponsors });
+  } catch (err) {
+    console.error("GET_SPONSORS_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: "Failed to fetch sponsors list." });
+  }
+});
+
+// Create Order for Sponsorship (0% Payment Gateway Fee Added)
+app.post("/api/sponsorship/create-order", async (req, res) => {
+  try {
+    const data = req.body || {};
+    const { companyName, contactPerson, phone, email, designation, tier, amount, gstin, website, logoUrl, message } = data;
+
+    if (!companyName || !contactPerson || !phone || !email || !amount) {
+      return res.status(400).json({ error: "MISSING_FIELDS", message: "Company name, contact person, phone, email, and amount are required." });
+    }
+
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ error: "INVALID_AMOUNT", message: "Please enter a valid sponsorship amount." });
+    }
+
+    const settings = await Settings.findOne() || { paymentGateway: "razorpay" };
+    const activeGateway = settings.paymentGateway || "razorpay";
+    const selectedTier = tier || "Custom";
+
+    if (activeGateway === "payu") {
+      const payuTxnId = `SPN_PAYU_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const { key, salt, actionUrl } = payuService.getPayuCredentials();
+      
+      const hostUrl = getBaseUrl(req, "BACKEND_URL");
+      const callbackUrl = `${hostUrl}/api/payu/callback`;
+      const firstname = companyName.trim().split(" ")[0] || "Sponsor";
+      const amountStr = numericAmount.toFixed(2);
+      const productinfo = `Chennimalai Marathon Sponsorship (${selectedTier})`;
+      const emailLower = String(email).trim().toLowerCase();
+      const udf1 = "sponsorship";
+      const udf2 = "sponsor_pay";
+
+      const hash = payuService.generatePayuRequestHash({
+        key, txnid: payuTxnId, amount: amountStr, productinfo,
+        firstname, email: emailLower, udf1, udf2, salt
+      });
+
+      const sponsorship = await Sponsorship.create({
+        companyName, contactPerson, phone, email: emailLower, designation: designation || "",
+        tier: selectedTier, amount: numericAmount, gstin: gstin || "", website: website || "",
+        logoUrl: logoUrl || "", message: message || "", paymentStatus: "Pending",
+        paymentGateway: "payu", payuTxnId
+      });
+
+      return res.json({
+        success: true, gateway: "payu", action: actionUrl,
+        sponsorshipId: sponsorship._id,
+        payuParams: {
+          key, txnid: payuTxnId, amount: amountStr, productinfo,
+          firstname, email: emailLower, phone: phone || "",
+          surl: callbackUrl, furl: callbackUrl, hash, udf1, udf2
+        },
+        totalAmount: numericAmount
+      });
+    }
+
+    // Default: Razorpay (0% PG Fee - exact amount charged)
+    const amountPaise = Math.round(numericAmount * 100);
+    const order = await razorpayService.createRazorpayOrder(amountPaise, "spn_rcpt");
+
+    const sponsorship = await Sponsorship.create({
+      companyName, contactPerson, phone, email: String(email).trim().toLowerCase(),
+      designation: designation || "", tier: selectedTier, amount: numericAmount,
+      gstin: gstin || "", website: website || "", logoUrl: logoUrl || "",
+      message: message || "", paymentStatus: "Pending", paymentGateway: "razorpay",
+      razorpayOrderId: order.id
+    });
+
+    return res.json({
+      success: true,
+      gateway: "razorpay",
+      orderId: order.id,
+      amount: amountPaise,
+      currency: "INR",
+      key: process.env.RAZORPAY_KEY_ID || "",
+      isDevelopment: !!order.demo || isDevelopment(),
+      sponsorshipId: sponsorship._id,
+      totalAmount: numericAmount
+    });
+  } catch (err) {
+    console.error("SPONSORSHIP_CREATE_ORDER_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: "Failed to create sponsorship order." });
+  }
+});
+
+async function generateNextSponsorId() {
+  const last = await Sponsorship.findOne({ sponsorId: { $regex: /^SPN-\d+$/ } })
+    .sort({ sponsorId: -1 })
+    .select("sponsorId")
+    .lean();
+  let nextNum = 1001;
+  if (last?.sponsorId) {
+    const parsed = parseInt(String(last.sponsorId).replace("SPN-", ""), 10);
+    if (!Number.isNaN(parsed)) nextNum = parsed + 1;
+  }
+  return `SPN-${String(nextNum).padStart(4, "0")}`;
+}
+
+async function markSponsorshipPaymentSuccess(sponsorship, extras = {}) {
+  if (!sponsorship) return { sponsorship: null, justCompleted: false };
+  if (sponsorship.paymentStatus === "Success" && sponsorship.sponsorId && sponsorship.sponsorId !== "N/A") {
+    Object.assign(sponsorship, extras);
+    if (Object.keys(extras).length) await sponsorship.save();
+    return { sponsorship, justCompleted: false };
+  }
+
+  if (!sponsorship.sponsorId || sponsorship.sponsorId === "N/A") {
+    sponsorship.sponsorId = await generateNextSponsorId();
+  }
+  sponsorship.paymentStatus = "Success";
+  if (typeof sponsorship.isApproved !== "boolean") sponsorship.isApproved = true;
+  Object.assign(sponsorship, extras);
+  await sponsorship.save();
+  return { sponsorship, justCompleted: true };
+}
+
+// Verify Payment for Sponsorship
+app.post("/api/sponsorship/verify-payment", async (req, res) => {
+  try {
+    const data = req.body || {};
+    const { sponsorshipId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
+
+    let sponsorship;
+    if (sponsorshipId) {
+      sponsorship = await Sponsorship.findById(sponsorshipId);
+    } else if (razorpay_order_id) {
+      sponsorship = await Sponsorship.findOne({ razorpayOrderId: razorpay_order_id });
+    }
+
+    if (!sponsorship) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Sponsorship record not found." });
+    }
+
+    if (sponsorship.paymentStatus === "Success") {
+      return res.json({ success: true, sponsorId: sponsorship.sponsorId, companyName: sponsorship.companyName });
+    }
+
+    const isValid = isDevelopment() ||
+      razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+
+    if (!isValid) {
+      sponsorship.paymentStatus = "Failed";
+      sponsorship.failureReason = "Payment signature verification failed";
+      await sponsorship.save();
+      return res.status(400).json({ error: "VERIFICATION_FAILED", message: "Payment signature invalid." });
+    }
+
+    const release = await mutex.acquire();
+    try {
+      sponsorship = await Sponsorship.findById(sponsorship._id);
+      if (!sponsorship) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "Sponsorship record not found." });
+      }
+      if (sponsorship.paymentStatus !== "Success") {
+        await markSponsorshipPaymentSuccess(sponsorship, {
+          razorpayPaymentId: razorpay_payment_id || "DEMO_PAY_ID",
+          razorpaySignature: razorpay_signature || "DEMO_SIG",
+          isApproved: true,
+          failureReason: "Payment Successful"
+        });
+      }
+    } finally {
+      release();
+    }
+
+    res.json({
+      success: true,
+      sponsorId: sponsorship.sponsorId,
+      companyName: sponsorship.companyName,
+      amount: sponsorship.amount,
+      tier: sponsorship.tier
+    });
+
+    emailService.sendSponsorshipEmail(sponsorship, isDevelopment()).catch(err => console.error("SPONSORSHIP_EMAIL_FAILED", err.message));
+  } catch (err) {
+    console.error("SPONSORSHIP_VERIFY_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: "Failed to verify sponsorship payment." });
   }
 });
 
@@ -432,11 +625,74 @@ app.post("/api/payu/callback", async (req, res) => {
   const status = String(data.status || "").toLowerCase();
   const errorMsg = data.error_Message || data.unmappedstatus || "Transaction declined";
   const isTokenPay = String(data.udf2 || "") === "token_pay";
+  const isSponsorshipPay =
+    String(data.udf1 || "") === "sponsorship" ||
+    String(data.udf2 || "") === "sponsor_pay" ||
+    String(txnid).startsWith("SPN_PAYU_");
 
   const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
+  const sponsorshipRedirectBase = `${frontendUrl}/sponsorship.html`;
   const successRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
   const failRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
 
+  // ---- Sponsorship PayU return path ----
+  if (isSponsorshipPay) {
+    if (!isValidHash && !isDevelopment()) {
+      console.error("PAYU_SPONSORSHIP_CALLBACK_HASH_INVALID:", data);
+      if (txnid) {
+        await Sponsorship.findOneAndUpdate(
+          { payuTxnId: txnid },
+          { paymentStatus: "Failed", failureReason: "PayU callback hash signature verification failed", paymentGatewayResponse: data }
+        );
+      }
+      return res.redirect(`${sponsorshipRedirectBase}?status=failed&reason=${encodeURIComponent("Security signature verification failed")}`);
+    }
+
+    if (status === "success") {
+      let sponsorship = null;
+      let justCompleted = false;
+      const release = await mutex.acquire();
+      try {
+        sponsorship = await Sponsorship.findOne({ payuTxnId: txnid });
+        if (!sponsorship) {
+          return res.redirect(`${sponsorshipRedirectBase}?status=failed&reason=${encodeURIComponent("Sponsorship record not found for this payment")}`);
+        }
+        if (sponsorship.paymentStatus !== "Success") {
+          const result = await markSponsorshipPaymentSuccess(sponsorship, {
+            payuMihpayid: mihpayid,
+            paymentGateway: "payu",
+            paymentGatewayResponse: data,
+            isApproved: true,
+            failureReason: "Payment Successful"
+          });
+          sponsorship = result.sponsorship;
+          justCompleted = result.justCompleted;
+        }
+      } catch (err) {
+        console.error("PAYU_SPONSORSHIP_CALLBACK_ERROR", err);
+      } finally {
+        release();
+      }
+
+      if (justCompleted && sponsorship) {
+        emailService.sendSponsorshipEmail(sponsorship, isDevelopment()).catch(err => console.error("PAYU_SPONSORSHIP_EMAIL_FAILED", err.message));
+      }
+
+      return res.redirect(
+        `${sponsorshipRedirectBase}?status=success&sponsorId=${encodeURIComponent(sponsorship?.sponsorId || "")}&company=${encodeURIComponent(sponsorship?.companyName || "")}&txnid=${encodeURIComponent(txnid)}`
+      );
+    }
+
+    if (txnid) {
+      await Sponsorship.findOneAndUpdate(
+        { payuTxnId: txnid },
+        { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg }
+      );
+    }
+    return res.redirect(`${sponsorshipRedirectBase}?status=failed&reason=${encodeURIComponent(errorMsg)}`);
+  }
+
+  // ---- Registration / token-pay PayU return path ----
   if (!isValidHash && !isDevelopment()) {
     console.error("PAYU_CALLBACK_HASH_INVALID:", data);
     if (txnid) {
@@ -459,24 +715,8 @@ app.post("/api/payu/callback", async (req, res) => {
         if (isTokenPay) {
           return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent("Registration not found for this payment")}`);
         }
-        const updatedSettings = await Settings.findOneAndUpdate(
-          {},
-          { $inc: { tshirtCounter: 1 } },
-          { new: true, upsert: true }
-        );
-        const tshirtNumber = String(updatedSettings.tshirtCounter - 1).padStart(RULES.TSHIRT_NUMBER_PAD_LENGTH || 4, "0");
-
-        regRecord = await Registration.create({
-          fullName: data.firstname || "Runner",
-          dob: "01/01/2000", age: 20, participantType: "Adult", category: "7 KM Timed Run",
-          gender: "others", phone: data.phone || "0000000000",
-          email: String(data.email || "").trim().toLowerCase(),
-          district: "Erode", pincode: "638051", tshirtSize: "M", tshirtSelected: true,
-          bloodGroup: "O+", emergencyContact: "0000000000", tshirtNumber,
-          paymentStatus: "Success", paymentGateway: "payu", payuTxnId: txnid, payuMihpayid: mihpayid,
-          paymentTokenUsed: true, paymentGatewayResponse: data, failureReason: "Payment Successful"
-        });
-        justCompleted = true;
+        // Do not invent fake registrations for unknown txn IDs
+        return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent("Registration not found for this payment")}`);
       } else if (regRecord.paymentStatus !== "Success") {
         await markRegistrationPaymentSuccess(regRecord, {
           payuMihpayid: mihpayid,
@@ -552,6 +792,7 @@ app.post("/api/razorpay/webhook", async (req, res) => {
 
     if (orderId) {
       let updatedRecord = null;
+      let updatedSponsorship = null;
       const release = await mutex.acquire();
       try {
         let reg = await Registration.findOne({ razorpayOrderId: orderId });
@@ -562,6 +803,17 @@ app.post("/api/razorpay/webhook", async (req, res) => {
             failureReason: "Payment Successful (Razorpay Webhook)"
           });
           updatedRecord = resSuccess.reg;
+        } else if (!reg) {
+          let sponsorship = await Sponsorship.findOne({ razorpayOrderId: orderId });
+          if (sponsorship && sponsorship.paymentStatus !== "Success") {
+            const result = await markSponsorshipPaymentSuccess(sponsorship, {
+              razorpayPaymentId: paymentId || "WEBHOOK_PAY_ID",
+              paymentGateway: "razorpay",
+              isApproved: true,
+              failureReason: "Payment Successful (Razorpay Webhook)"
+            });
+            updatedSponsorship = result.sponsorship;
+          }
         }
       } catch (err) {
         console.error("WEBHOOK_PROCESSING_ERROR", err);
@@ -585,6 +837,10 @@ app.post("/api/razorpay/webhook", async (req, res) => {
         sheets.appendRegistrationSuccess(sheetData).catch(() => {});
         sheets.appendRegistrationStatus(sheetData).catch(() => {});
         emailService.sendRegistrationEmail(updatedRecord, isDevelopment()).catch(err => console.error("WEBHOOK_EMAIL_FAILED", err.message));
+      }
+
+      if (updatedSponsorship) {
+        emailService.sendSponsorshipEmail(updatedSponsorship, isDevelopment()).catch(err => console.error("WEBHOOK_SPONSORSHIP_EMAIL_FAILED", err.message));
       }
     }
   }
