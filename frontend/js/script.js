@@ -1186,11 +1186,8 @@ document.addEventListener('DOMContentLoaded', function () {
       wallContainers.forEach(function (container) {
         if (!data.success || !data.sponsors || !data.sponsors.length) {
           container.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; padding: 30px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1;">
-              <i class="fa-solid fa-handshake" style="font-size: 32px; color: #94a3b8; margin-bottom: 8px;"></i>
-              <h4 style="font-size: 16px; color: #334155; margin-bottom: 4px;">Sponsorship Opportunities Open</h4>
-              <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Become our early partner and get featured here.</p>
-              <a href="sponsorship.html" class="btn-register" style="display: inline-block; padding: 8px 18px; font-size: 13px;"><i class="fa-solid fa-plus"></i> Become a Sponsor</a>
+            <div class="sponsors-empty-inline">
+              <p>Sponsorship opportunities are open. Be our early partner and get featured here.</p>
             </div>
           `;
           return;
@@ -1205,13 +1202,13 @@ document.addEventListener('DOMContentLoaded', function () {
           var safeContact = escapeHtml(sp.contactPerson || "");
           var safeWebsite = sanitizeUrl(sp.website);
           var websiteHtml = safeWebsite
-            ? `<a href="${escapeHtml(safeWebsite)}" target="_blank" rel="noopener noreferrer" style="font-size: 12px; color: var(--green); text-decoration: underline; margin-top: 6px; display: inline-block;"><i class="fa-solid fa-globe"></i> Visit Website</a>`
+            ? `<a href="${escapeHtml(safeWebsite)}" target="_blank" rel="noopener noreferrer" class="sponsor-link"><i class="fa-solid fa-globe"></i> Visit Website</a>`
             : "";
 
           card.innerHTML = `
             <span class="sponsor-badge badge-${safeTier}">${safeTier} Sponsor</span>
-            <h4 style="font-size: 18px; font-weight: 700; color: var(--navy); margin: 6px 0 2px;">${safeCompany}</h4>
-            <div style="font-size: 13px; color: #64748b;">${safeContact}</div>
+            <h4>${safeCompany}</h4>
+            <div class="sponsor-contact">${safeContact}</div>
             ${websiteHtml}
           `;
           container.appendChild(card);

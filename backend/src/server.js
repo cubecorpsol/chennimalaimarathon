@@ -631,7 +631,7 @@ app.post("/api/payu/callback", async (req, res) => {
     String(txnid).startsWith("SPN_PAYU_");
 
   const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
-  const sponsorshipRedirectBase = `${frontendUrl}/sponsorship.html`;
+  const sponsorshipRedirectBase = `${frontendUrl}/sponsors.html`;
   const successRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
   const failRedirectBase = isTokenPay ? `${frontendUrl}/pay.html` : `${frontendUrl}/register.html`;
 
@@ -977,6 +977,17 @@ app.post("/api/register", async (req, res) => {
 });
 
 // Admin routes have been moved to the standalone chennimalaimarathon-admin project.
+
+// Custom 404 for unknown non-API routes (local / non-Vercel static)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "API endpoint not found." });
+  }
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    return next();
+  }
+  res.status(404).sendFile(path.join(__dirname, "../../frontend/404.html"));
+});
 
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
