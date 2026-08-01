@@ -123,10 +123,10 @@ table { max-width: 100%; }
     color:var(--orange);
 }
 
-.breadcrumb i{
+/* .breadcrumb i{
     font-size:12px;
     line-height:1;
-}
+} */
 
 .breadcrumb-arrow{
     font-size:10px;
@@ -446,7 +446,7 @@ table { max-width: 100%; }
 /* =========================================================
    ABOUT PAGE
 ========================================================= */
-.about-cta {
+/* .about-cta {
     max-width: 1680px;
     margin: 0 auto;
     padding: 26px 40px;
@@ -481,7 +481,7 @@ table { max-width: 100%; }
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-}
+} */
 
 /* LEFT CONTENT */
 .about-hero .inner-hero-content{
