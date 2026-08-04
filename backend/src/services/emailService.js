@@ -97,7 +97,7 @@ function buildResponsiveEmailWrapper({ previewText = "", headerSubtitle = "", co
                   <td align="center" style="padding-bottom: 16px;">
                     <a href="https://www.chennimalaimarathon.com" target="_blank" style="color: #7ed99a; text-decoration: none; font-weight: 600; margin: 0 8px; display: inline-block;">🌐 Website</a>
                     <span style="color: #334155;">|</span>
-                    <a href="mailto:info@chennimalaimarathon.in" style="color: #7ed99a; text-decoration: none; font-weight: 600; margin: 0 8px; display: inline-block;">✉️ Contact Support</a>
+                    <a href="mailto:info@chennimalaimarathon.com" style="color: #7ed99a; text-decoration: none; font-weight: 600; margin: 0 8px; display: inline-block;">✉️ Contact Support</a>
                     <span style="color: #334155;">|</span>
                     <a href="https://www.instagram.com/chennimalai_marathon?igsh=MXM0Mmk0bDFtZGUwNg%3D%3D&utm_source=qr" target="_blank" style="color: #7ed99a; text-decoration: none; font-weight: 600; margin: 0 8px; display: inline-block;">📷 Instagram</a>
                   </td>
@@ -105,7 +105,7 @@ function buildResponsiveEmailWrapper({ previewText = "", headerSubtitle = "", co
                 <tr>
                   <td align="center" style="border-top: 1px solid #1e293b; padding-top: 14px; font-size: 12px; color: #64748b; line-height: 1.4;">
                     © 2026 Chennimalai Marathon. All Rights Reserved.<br>
-                    Official Support: <a href="mailto:info@chennimalaimarathon.in" style="color: #94a3b8;">info@chennimalaimarathon.in</a>
+                    Official Support: <a href="mailto:info@chennimalaimarathon.com" style="color: #94a3b8;">info@chennimalaimarathon.com</a>
                   </td>
                 </tr>
               </table>
