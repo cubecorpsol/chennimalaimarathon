@@ -28,8 +28,30 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize MongoDB Connection on Startup
-connectDB();
+// Ensure DB is connected before any API handler runs.
+// Fire-and-forget connectDB() alone fails on Vercel cold starts because
+// Settings.findOne() buffers until "Operation settings.findOne() buffering timed out after 10000ms".
+app.use(async (req, res, next) => {
+  const pathToCheck = req.path || "";
+  const urlToCheck = req.originalUrl || req.url || "";
+  const isApi = pathToCheck.startsWith("/api") || urlToCheck.startsWith("/api");
+  if (!isApi) return next();
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("❌ DB Middleware Connect Error:", err.message);
+    return res.status(503).json({
+      error: "DB_CONNECTION_FAILED",
+      message: "Unable to connect to database. Please try again in a moment."
+    });
+  }
+});
+
+// Warm the connection on long-running (non-Vercel) processes
+if (!process.env.VERCEL) {
+  connectDB().catch((err) => console.error("❌ Startup DB connect failed:", err.message));
+}
 
 // Serve Static Frontend Files
 app.use(express.static(path.join(__dirname, "../../frontend")));

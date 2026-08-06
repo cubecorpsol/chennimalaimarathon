@@ -69,9 +69,9 @@ const AdminUserSchema = new mongoose.Schema({
   otpExpiresAt: { type: Date, default: null }
 }, { timestamps: true });
 
-const Settings = mongoose.model("Settings", SettingsSchema);
-const Registration = mongoose.model("Registration", RegistrationSchema);
-const AdminUser = mongoose.model("AdminUser", AdminUserSchema);
+const Settings = mongoose.models.Settings || mongoose.model("Settings", SettingsSchema);
+const Registration = mongoose.models.Registration || mongoose.model("Registration", RegistrationSchema);
+const AdminUser = mongoose.models.AdminUser || mongoose.model("AdminUser", AdminUserSchema);
 
 const SponsorshipSchema = new mongoose.Schema({
   sponsorId: { type: String, default: "N/A" },
@@ -107,24 +107,56 @@ const SponsorshipSchema = new mongoose.Schema({
   isApproved: { type: Boolean, default: true }
 }, { timestamps: true });
 
-const Sponsorship = mongoose.model("Sponsorship", SponsorshipSchema);
+const Sponsorship = mongoose.models.Sponsorship || mongoose.model("Sponsorship", SponsorshipSchema);
+
+// Cached connection — required on Vercel serverless so cold starts don't
+// hit Mongoose buffering timeouts (settings.findOne() timed out after 10000ms).
+let isConnected = false;
+let connPromise = null;
+
+mongoose.connection.on("disconnected", () => {
+  isConnected = false;
+  connPromise = null;
+});
+
+mongoose.connection.on("error", () => {
+  isConnected = false;
+  connPromise = null;
+});
 
 async function connectDB() {
   const mongoURI = process.env.DATABASE_URL;
   if (!mongoURI) {
     console.error("❌ MONGODB_ERROR: DATABASE_URL is missing in environment variables.");
-    return false;
+    throw new Error("DATABASE_URL is missing in environment variables.");
   }
 
-  try {
-    await mongoose.connect(mongoURI);
-    console.log("✅ Connected to MongoDB Atlas successfully.");
-    await seedInitialData();
+  if (isConnected && mongoose.connection.readyState === 1) {
     return true;
-  } catch (err) {
-    console.error("❌ MONGODB_CONNECT_FAILED:", err.message);
-    return false;
   }
+
+  if (!connPromise) {
+    connPromise = mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 10,
+      // Fail fast instead of buffering queries for 10s when disconnected
+      bufferCommands: false
+    }).then(async (conn) => {
+      isConnected = true;
+      console.log("✅ Connected to MongoDB Atlas successfully.");
+      await seedInitialData();
+      return conn;
+    }).catch((err) => {
+      connPromise = null;
+      isConnected = false;
+      console.error("❌ MONGODB_CONNECT_FAILED:", err.message);
+      throw err;
+    });
+  }
+
+  await connPromise;
+  return true;
 }
 
 async function seedInitialData() {
@@ -155,9 +187,9 @@ async function seedInitialData() {
       }
     }
 
-    // 2. Seed Default Super Admin
+    // 2. Seed Super Admin only when missing (avoid bcrypt.hash on every cold start)
     const defaultEmail = "sniwaserode@gmail.com";
-    const existingAdmin = await AdminUser.findOne({ email: defaultEmail });
+    const existingAdmin = await AdminUser.findOne({ email: defaultEmail }).select("_id role");
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash("admin123", 10);
       await AdminUser.create({
@@ -167,6 +199,9 @@ async function seedInitialData() {
         role: "superadmin"
       });
       console.log(`🌱 [DB SEED] Super Admin user created: ${defaultEmail}`);
+    } else if (existingAdmin.role !== "superadmin") {
+      existingAdmin.role = "superadmin";
+      await existingAdmin.save();
     }
 
     // 3. Backfill legacy tshirtNumber → tempBibNumber for older registrations

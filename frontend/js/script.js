@@ -815,13 +815,27 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     try {
-      var orderRes = await fetch(BACKEND_URL + "/api/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      // Retry briefly on cold-start / DB connect failures so users aren't stuck
+      // before the payment gateway opens.
+      var orderRes = null;
+      var orderData = null;
+      for (var orderAttempt = 1; orderAttempt <= 3; orderAttempt++) {
+        orderRes = await fetch(BACKEND_URL + "/api/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        orderData = await orderRes.json().catch(function () { return {}; });
 
-      var orderData = await orderRes.json();
+        if (orderRes.ok || orderRes.status === 400 || orderRes.status === 403) break;
+        if (orderRes.status === 503 || orderData.error === "DB_CONNECTION_FAILED" || orderData.error === "ORDER_CREATION_FAILED") {
+          if (orderAttempt < 3) {
+            await new Promise(function (resolve) { setTimeout(resolve, 1200 * orderAttempt); });
+            continue;
+          }
+        }
+        break;
+      }
 
       if (orderRes.status === 403) {
         showAlertModal(orderData.message || "Registrations are closed. All slots have been filled.");
