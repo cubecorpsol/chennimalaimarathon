@@ -1,3 +1,31 @@
+const TSHIRT_MAP = {
+  "XS":        { label: "XS (34)", sizeNum: "34", width: "17",   height: "24.75" },
+  "XS (34)":   { label: "XS (34)", sizeNum: "34", width: "17",   height: "24.75" },
+  "S":         { label: "S (36)",  sizeNum: "36", width: "18",   height: "26.25" },
+  "S (36)":    { label: "S (36)",  sizeNum: "36", width: "18",   height: "26.25" },
+  "M":         { label: "M (38)",  sizeNum: "38", width: "19",   height: "27.75" },
+  "M (38)":    { label: "M (38)",  sizeNum: "38", width: "19",   height: "27.75" },
+  "L":         { label: "L (40)",  sizeNum: "40", width: "20",   height: "28.75" },
+  "L (40)":    { label: "L (40)",  sizeNum: "40", width: "20",   height: "28.75" },
+  "XL":        { label: "XL (42)", sizeNum: "42", width: "21",   height: "29.75" },
+  "XL (42)":   { label: "XL (42)", sizeNum: "42", width: "21",   height: "29.75" },
+  "XXL":       { label: "XXL (44)", sizeNum: "44", width: "22",  height: "30.75" },
+  "XXL (44)":  { label: "XXL (44)", sizeNum: "44", width: "22",  height: "30.75" },
+  "XXXL":      { label: "XXXL (46)", sizeNum: "46", width: "23", height: "31.75" },
+  "XXXL (46)": { label: "XXXL (46)", sizeNum: "46", width: "23", height: "31.75" }
+};
+
+function getTshirtDetails(inputSize) {
+  if (!inputSize) return { label: "N/A", sizeNum: "N/A", width: "N/A", height: "N/A" };
+  const key = String(inputSize).trim().toUpperCase();
+  return TSHIRT_MAP[key] || { label: inputSize, sizeNum: "N/A", width: "N/A", height: "N/A" };
+}
+
+module.exports = {
+  // ... your existing config exports ...
+  getTshirtDetails
+};
+
 const DISTRICTS = [
   "Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore",
   "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kanchipuram",

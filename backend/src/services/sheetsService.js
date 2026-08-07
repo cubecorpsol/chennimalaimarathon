@@ -47,7 +47,7 @@ async function appendRegistrationSuccess(record) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
-      range: "Registrations!A:S",
+      range: "Registrations!A:V", // Expanded from A:S to A:V (3 new columns)
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -64,6 +64,9 @@ async function appendRegistrationSuccess(record) {
           record.district || "",
           record.pincode || "",
           record.tshirtSize || "",
+          record.tshirtSizeNum || "N/A",  // 🆕 Added Size Number (e.g., 34)
+          record.tshirtWidth || "N/A",    // 🆕 Added Width in inches (e.g., 17)
+          record.tshirtHeight || "N/A",   // 🆕 Added Height in inches (e.g., 24.75)
           record.tshirtSelected ? "YES" : "NO",
           record.bloodGroup || "",
           resolveTempBib(record),
@@ -91,7 +94,7 @@ async function appendRegistrationStatus(record) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
-      range: "'Registration Status'!A:U",
+      range: "'Registration Status'!A:X", // Expanded from A:U to A:X (3 new columns)
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
@@ -108,6 +111,9 @@ async function appendRegistrationStatus(record) {
           record.district || "",
           record.pincode || "",
           record.tshirtSize || "",
+          record.tshirtSizeNum || "N/A",  // 🆕 Added Size Number (e.g., 34)
+          record.tshirtWidth || "N/A",    // 🆕 Added Width in inches (e.g., 17)
+          record.tshirtHeight || "N/A",   // 🆕 Added Height in inches (e.g., 24.75)
           record.tshirtSelected ? "YES" : "NO",
           record.bloodGroup || "",
           resolveTempBib(record),

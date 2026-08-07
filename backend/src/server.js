@@ -1,3 +1,4 @@
+const { getTshirtDetails } = require('./config');
 process.on("unhandledRejection", (reason) => console.error("UNHANDLED CRASH REASON:", reason));
 process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
 
@@ -122,7 +123,11 @@ function buildRegistrationSheetData(record, failureReason) {
     fullName: record.fullName, dob: record.dob, age: record.age,
     participantType: record.participantType, category: record.category,
     gender: record.gender, phone: record.phone, email: record.email,
-    district: record.district, pincode: record.pincode, tshirtSize: record.tshirtSize,
+    district: record.district, pincode: record.pincode, 
+    tshirtSize: record.tshirtSize,
+    tshirtSizeNum: record.tshirtSizeNum || "N/A",
+    tshirtWidth: record.tshirtWidth || "N/A",
+    tshirtHeight: record.tshirtHeight || "N/A",
     tshirtSelected: record.tshirtSelected, bloodGroup: record.bloodGroup,
     tempBibNumber: record.tempBibNumber || record.tshirtNumber,
     permanentBibNumber: record.permanentBibNumber,
@@ -978,11 +983,18 @@ app.post("/api/register", async (req, res) => {
       const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
       const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
 
+      // 👕 Resolve full T-shirt details (label, size number, width, height)
+      const rawSize = participantType === "Kids" ? "N/A" : (data.tshirtSize || "M");
+      const tshirtInfo = getTshirtDetails(rawSize);
+
       regRecord = await Registration.create({
         fullName: data.fullName || "Runner", dob: data.dob || "01/01/2000", age,
         participantType, category, gender: data.gender || "others", phone: data.phone || "",
         email: emailLower, district: data.district || "", pincode: data.pincode || "",
-        tshirtSize: participantType === "Kids" ? "N/A" : (data.tshirtSize || "M"),
+        tshirtSize: tshirtInfo.label,
+        tshirtSizeNum: tshirtInfo.sizeNum,
+        tshirtWidth: tshirtInfo.width,
+        tshirtHeight: tshirtInfo.height,
         tshirtSelected: participantType !== "Kids" && data.tshirtSelected !== false && data.tshirtSelected !== "false",
         bloodGroup: data.bloodGroup || "O+", emergencyContact: data.emergencyContact || "",
         tshirtNumber: "N/A", paymentStatus: "Pending",
