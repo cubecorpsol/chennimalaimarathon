@@ -417,4 +417,70 @@ async function sendSponsorshipEmail(record, isDev = false) {
   }
 }
 
-module.exports = { sendRegistrationEmail, sendSponsorshipEmail };
+function buildPaymentRequestEmailHTML(record, payLink, isDev) {
+  const subtotal = (record.registrationFee || 0) + (record.tshirtFee || 0);
+  const pgFee = record.pgFee !== undefined && record.pgFee > 0 ? record.pgFee : Number((subtotal * 0.025).toFixed(2));
+  const totalAmount = record.totalAmount && record.totalAmount > subtotal ? record.totalAmount : Number((subtotal + pgFee).toFixed(2));
+
+  const contentHtml = `
+    ${isDev ? '<div style="background:#fff3cd;color:#856404;padding:12px;margin-bottom:18px;border-radius:8px;font-weight:bold;font-size:13px;">⚠️ DEVELOPMENT MODE TEST EMAIL</div>' : ''}
+
+    <p style="font-size: 15px; color: #1e293b; margin-top: 0;">Dear <strong>${record.fullName || "Runner"}</strong>,</p>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+      We noticed your last payment attempt for <strong>Chennimalai Marathon 2026</strong> (${record.category || "Marathon"}) did not go through, so your registration is not yet confirmed. No amount was retained on our end for this attempt.
+    </p>
+    <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+      Please use the secure link below to complete your payment and confirm your spot. This link is unique to you and will be deactivated automatically once payment is completed.
+    </p>
+
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px; margin: 20px 0; text-align: center;">
+      <div style="font-size: 12px; color: #166534; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Amount Payable</div>
+      <div style="font-size: 26px; font-weight: 800; color: #15803d; font-family: 'Poppins', sans-serif; margin: 4px 0;">₹${totalAmount.toLocaleString("en-IN")}</div>
+    </div>
+
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${payLink}" class="cta-button" style="display: inline-block; background: #f5a623; color: #0d1f47; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 15px; padding: 14px 32px; border-radius: 8px; text-decoration: none;">Complete Your Payment</a>
+    </div>
+
+    <p style="font-size: 12px; color: #94a3b8; text-align: center; word-break: break-all;">${payLink}</p>
+
+    <p style="font-size: 13px; color: #64748b; margin-top: 20px; line-height: 1.6;">
+      If you believe this is a mistake, or you already completed the payment and see this message, please contact us at <a href="mailto:info@chennimalaimarathon.com" style="color:#1f6d3f;">info@chennimalaimarathon.com</a> before attempting to pay again.
+    </p>
+  `;
+
+  return buildResponsiveEmailWrapper({
+    previewText: `Action Required: Complete your payment for Chennimalai Marathon 2026`,
+    headerSubtitle: "Payment Request",
+    contentHtml
+  });
+}
+
+async function sendPaymentRequestEmail(record, payLink, isDev = false) {
+  const subject = `${isDev ? "[DEV] " : ""}Action Required: Complete Your Payment - Chennimalai Marathon 2026`;
+  const htmlContent = buildPaymentRequestEmailHTML(record, payLink, isDev);
+
+  if (!record?.email) {
+    console.error("❌ PAYMENT_REQUEST_EMAIL_SKIPPED: registration has no email address.");
+    return false;
+  }
+
+  const smtpObj = getTransporter();
+  if (!smtpObj) return false;
+
+  try {
+    const info = await smtpObj.transporter.sendMail({
+      from: smtpObj.senderEmail,
+      to: record.email,
+      subject: subject,
+      html: htmlContent
+    });
+    console.log(`✉️ [ZEPTOMAIL SMTP] Payment request email sent to ${record.email} (messageId: ${info.messageId})`);
+    return true;
+  } catch (err) {
+    console.error(`❌ ZEPTOMAIL_SMTP_PAYMENT_REQUEST_EMAIL_SEND_ERROR for ${record.email}:`, err.message);
+    return false;
+  }
+}
+
+module.exports = { sendRegistrationEmail, sendSponsorshipEmail, sendPaymentRequestEmail };

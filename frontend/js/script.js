@@ -60,6 +60,66 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /* =========================================================
+   LIVE REMAINING SLOTS BADGE — the small in-form pill on the
+   register page (#remainingSlotsBadge inside step-personal, or
+   any .remaining-slots-box). Mirrors the admin "show remaining
+   slots" toggle exposed via /api/status. Irrelevant while
+   registrations are closed because its parent step is swapped
+   out for the closed panel at that point anyway.
+   ========================================================= */
+function updateRemainingSlotsBadge(data) {
+  var slotsContainer = document.getElementById("remainingSlotsBadge") || document.querySelector(".remaining-slots-box");
+  if (!slotsContainer) return;
+  if (!data || data.showRemainingSlots === false) {
+    slotsContainer.style.display = "none";
+    return;
+  }
+  slotsContainer.style.display = "";
+  var slotsVal = document.getElementById("remainingSlotsVal");
+  if (slotsVal) slotsVal.textContent = data.remainingSlots;
+}
+
+/* =========================================================
+   HOME PAGE STATUS BANNER — #homeSlotsBanner. Unlike the
+   register-page badge above, the home page has no form step to
+   swap out, so when registrations are closed this banner itself
+   becomes the "Registrations Closed" notice and points the
+   visitor at the register page for full details/contact info.
+   ========================================================= */
+function updateHomeSlotsBanner(data) {
+  var banner = document.getElementById("homeSlotsBanner");
+  if (!banner) return;
+
+  if (!data) {
+    banner.style.display = "none";
+    return;
+  }
+
+  if (data.closed || data.isOpen === false) {
+    banner.classList.add("closed");
+    banner.style.display = "";
+    banner.innerHTML =
+      '<div class="slots-strip-inner">' +
+      '<i class="fa-solid fa-circle-exclamation"></i>' +
+      '<span>Registrations Closed — Kindly visit the <a href="register.html">Register Page</a> for more details.</span>' +
+      '</div>';
+    return;
+  }
+
+  banner.classList.remove("closed");
+  if (data.showRemainingSlots === false) {
+    banner.style.display = "none";
+    return;
+  }
+  banner.style.display = "";
+  banner.innerHTML =
+    '<div class="slots-strip-inner">' +
+    '<i class="fa-solid fa-bolt"></i>' +
+    '<span><span class="slots-num">' + (data.remainingSlots != null ? data.remainingSlots : 0) + '</span> Registration Slots Remaining — Grab yours before they\'re gone!</span>' +
+    '</div>';
+}
+
+/* =========================================================
    CHENNIMALAI MARATHON — REGISTER PAGE
    Step navigation, validation, DOB → Category auto selection,
    and progress indicator for register.html
@@ -67,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 document.addEventListener('DOMContentLoaded', function () {
   var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-  var BACKEND_URL = isLocal ? "http://localhost:3000" : ""; 
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
 
   function updateDynamicPrices(settings) {
     if (!settings) return;
@@ -94,6 +154,8 @@ document.addEventListener('DOMContentLoaded', function () {
       var res = await fetch(BACKEND_URL + "/api/status");
       var data = await res.json();
       updateDynamicPrices(data);
+      updateRemainingSlotsBadge(data);
+      updateHomeSlotsBanner(data);
     } catch (err) {
       console.warn("Global status check error:", err);
     }
@@ -238,21 +300,12 @@ document.addEventListener('DOMContentLoaded', function () {
       updateCategory();
 
       if (data.closed || data.isOpen === false) {
-        disableRegistrations("Registrations Closed! All slots have been filled or registrations are closed.");
+        showRegistrationsClosedPanel();
+      } else {
+        showRegistrationsOpenFlow();
       }
 
-      // Handle dynamic remaining slots badge if present on DOM
-      var slotsContainer = document.getElementById("remainingSlotsBadge") || document.querySelector(".remaining-slots-box");
-      if (slotsContainer) {
-        if (data.showRemainingSlots === false) {
-          slotsContainer.style.display = "none";
-        } else {
-          slotsContainer.style.display = "";
-          var slotsVal = document.getElementById("remainingSlotsVal");
-          if (slotsVal) slotsVal.textContent = data.remainingSlots;
-        }
-      }
-
+      updateRemainingSlotsBadge(data);
       updateTshirtHint();
       updateRegistrationSummary();
     } catch (err) {
@@ -260,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  function disableRegistrations(msg) {
+  function lockRegistrationButtons() {
     if (registerBtn) {
       registerBtn.disabled = true;
       registerBtn.textContent = "REGISTRATIONS CLOSED";
@@ -269,7 +322,41 @@ document.addEventListener('DOMContentLoaded', function () {
       continueBtn.disabled = true;
       continueBtn.textContent = "REGISTRATIONS CLOSED";
     }
-    showAlertModal(msg);
+  }
+
+  // Swaps the whole registration form out for a persistent "Registrations
+  // Closed" panel (with contact details) instead of just disabling buttons —
+  // the closed state must survive as long as the page is open, not just
+  // flash a one-time alert. Only used for the initial/incoming-visitor
+  // state check — a visitor already on step-success (they just took the
+  // last slot) keeps their confirmation and is only button-locked.
+  function showRegistrationsClosedPanel() {
+    var closedStep = document.getElementById('step-closed');
+    var successStep = document.getElementById('step-success');
+    if (closedStep && !(successStep && successStep.classList.contains('active'))) {
+      formSteps.forEach(function (step) { step.classList.remove('active'); });
+      closedStep.classList.add('active');
+    }
+    lockRegistrationButtons();
+  }
+
+  // Restores the regular step-1 flow — used when /api/status reports
+  // registrations are open (default state on every fresh page load).
+  function showRegistrationsOpenFlow() {
+    var closedStep = document.getElementById('step-closed');
+    if (closedStep && closedStep.classList.contains('active')) {
+      closedStep.classList.remove('active');
+      var personalStep = document.getElementById('step-personal');
+      if (personalStep) personalStep.classList.add('active');
+    }
+    if (registerBtn) {
+      registerBtn.disabled = false;
+      registerBtn.textContent = "REGISTER NOW";
+    }
+    if (continueBtn) {
+      continueBtn.disabled = false;
+      continueBtn.textContent = "CONTINUE";
+    }
   }
 
   async function reportPaymentPending(payload, reason) {
@@ -910,7 +997,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (verifyRes.ok) {
           goToStep('step-success');
           if (verifyData.closed) {
-            disableRegistrations("Registrations are now officially closed.");
+            lockRegistrationButtons();
           }
         } else {
           showAlertModal(verifyData.message || "Registration failed.");
@@ -953,7 +1040,7 @@ document.addEventListener('DOMContentLoaded', function () {
               // Payment verified — registration record updated to Success.
               goToStep('step-success');
               if (verifyData.closed) {
-                disableRegistrations("Registrations are now officially closed.");
+                lockRegistrationButtons();
               }
             } else {
               showAlertModal(verifyData.message || "Payment verification failed.");

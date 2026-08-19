@@ -98,11 +98,30 @@
     <div class="register-form-panel">
       <div class="register-card">
  
+        <!-- REGISTRATIONS CLOSED PANEL -->
+        <div class="form-step" id="step-closed">
+          <div class="reg-closed-panel">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <h2>Registrations Closed</h2>
+            <p>All slots for the Chennimalai Marathon 2026 have been filled, or registrations are currently closed. Thank you to everyone who joined us!</p>
+            <div class="reg-closed-contact">
+              <div class="contact-title">For Further Registration, Kindly Contact The Team</div>
+              <div class="contact-row"><i class="fa-solid fa-phone"></i> <a href="tel:+91 8220975990">+91 82209 75990</a></div>
+              <div class="contact-row"><i class="fa-solid fa-phone"></i> <a href="tel:+91 8883921424">+91 8883921424</a></div>
+              <div class="contact-row"><i class="fa-solid fa-envelope"></i> <a href="mailto:info@chennimalaimarathon.com">info@chennimalaimarathon.com</a></div>
+            </div>
+          </div>
+        </div>
+
         <!-- STEP 1 — PERSONAL DETAILS -->
         <div class="form-step active" id="step-personal">
- 
+
           <div class="step-badge">STEP 1 OF 2</div>
- 
+
+          <div class="reg-slots-badge" id="remainingSlotsBadge" style="display:none;">
+            <i class="fa-solid fa-bolt"></i> <span id="remainingSlotsVal">0</span>&nbsp;Registration Slots Remaining
+          </div>
+
           <div class="register-stepper">
             <div class="stepper-item active" id="stepper-item-personal">
               <span class="stepper-label">Personal Details</span>

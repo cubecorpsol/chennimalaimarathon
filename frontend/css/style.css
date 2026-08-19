@@ -302,6 +302,20 @@ table { max-width: 100%; }
 .info-item .info-value { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
 .info-item .info-value .highlight { color: var(--orange); }
 
+/* ===== Live Remaining Slots Strip (Home Page) ===== */
+.slots-strip { background: #fff8e6; border-top: 3px solid var(--orange); border-bottom: 1px solid #ffe58f; padding: 14px 0; }
+.slots-strip-inner { max-width: 1680px; margin: 0 auto; padding: 0 40px; display: flex; align-items: center; justify-content: center; gap: 10px; text-align: center; font-family: var(--font-display); font-weight: 700; color: #92400e; font-size: 15px; }
+.slots-strip-inner i { color: var(--orange-dark); font-size: 18px; }
+.slots-strip-inner .slots-num { color: var(--orange-dark); font-size: 19px; }
+.slots-strip-inner a { color: inherit; text-decoration: underline; }
+.slots-strip.closed { background: #fef2f2; border-top-color: #dc2626; border-bottom-color: #fecaca; }
+.slots-strip.closed .slots-strip-inner { color: #991b1b; }
+.slots-strip.closed .slots-strip-inner i { color: #dc2626; }
+
+/* ===== Live Remaining Slots Badge (Register Page) ===== */
+.reg-slots-badge { display: flex; align-items: center; justify-content: center; gap: 8px; background: #fff8e6; border: 1px solid #ffe58f; color: #92400e; font-weight: 700; font-size: 13px; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; text-align: center; }
+.reg-slots-badge i { color: var(--orange-dark); }
+
 /* =========================================================
    SECTION HEADING (shared)
 ========================================================= */
@@ -917,6 +931,18 @@ table { max-width: 100%; }
 .register-card h2 { font-size: 26px; font-weight: 800; color: var(--navy); text-align: center; letter-spacing: 0.5px; }
 .register-card h2 .step-icon { color: var(--orange); font-size: 20px; margin-right: 6px; }
 .register-card .form-divider { width: 46px; height: 3px; background: var(--orange); margin: 12px auto 30px; }
+
+/* ===== Registrations Closed Panel ===== */
+.reg-closed-panel { text-align: center; padding: 10px 4px; }
+.reg-closed-panel > i { font-size: 52px; color: var(--orange-dark); margin-bottom: 16px; }
+.reg-closed-panel h2 { font-size: 24px; font-weight: 800; color: var(--navy); margin-bottom: 10px; text-align: center; }
+.reg-closed-panel p { font-size: 14.5px; color: var(--text-gray); line-height: 1.6; margin-bottom: 18px; }
+.reg-closed-contact { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin-top: 6px; }
+.reg-closed-contact .contact-title { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.reg-closed-contact .contact-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0; font-size: 14.5px; color: var(--navy); font-weight: 600; flex-wrap: wrap; }
+.reg-closed-contact .contact-row i { color: var(--orange-dark); width: 16px; }
+.reg-closed-contact .contact-row a { color: var(--green-dark); font-weight: 700; text-decoration: none; }
+.reg-closed-contact .contact-row a:hover { text-decoration: underline; }
 
 .form-step { display: none; }
 .form-step.active { display: block; animation: fadeIn .3s ease; }

@@ -24,7 +24,33 @@ const mutex = new Mutex();
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(cors());
+app.disable("x-powered-by");
+
+// Same-origin requests (the site calling its own API — the normal case,
+// since the frontend and API share one Vercel deployment) never go through
+// CORS at all; this allowlist only governs *other* origins' browser JS,
+// which has no legitimate reason to call these endpoints directly.
+const ALLOWED_ORIGINS = [
+  "https://www.chennimalaimarathon.com",
+  "https://chennimalaimarathon.com"
+];
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // server-to-server / curl / same-origin
+    if (ALLOWED_ORIGINS.includes(origin) || LOCAL_ORIGIN_RE.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Not allowed by CORS"));
+  }
+}));
+app.use((err, req, res, next) => {
+  if (err && err.message === "Not allowed by CORS") {
+    return res.status(403).json({ error: "FORBIDDEN", message: "Cross-origin request not allowed." });
+  }
+  next(err);
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -820,13 +846,18 @@ app.post("/api/payu/callback", async (req, res) => {
       );
     }
 
-    return res.redirect(`${successRedirectBase}?status=success&txnid=${encodeURIComponent(txnid)}&bib=${encodeURIComponent(regRecord?.tshirtNumber || "")}&name=${encodeURIComponent(regRecord?.fullName || "")}&email=${encodeURIComponent(regRecord?.email || "")}&category=${encodeURIComponent(regRecord?.category || "")}`);
+    // Deliberately excludes fullName/email from the redirect URL — query strings
+    // land in browser history, server access logs, and third-party analytics
+    // (gtag.js auto-pageview) that load on the landing page, so no PII rides here.
+    return res.redirect(`${successRedirectBase}?status=success&txnid=${encodeURIComponent(txnid)}&bib=${encodeURIComponent(regRecord?.tshirtNumber || "")}&category=${encodeURIComponent(regRecord?.category || "")}`);
   } else {
     if (txnid) {
-      await Registration.findOneAndUpdate(
+      const failedReg = await Registration.findOneAndUpdate(
         { payuTxnId: txnid },
-        { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg }
+        { paymentStatus: "Failed", paymentGatewayResponse: data, failureReason: errorMsg },
+        { new: true }
       );
+      if (failedReg) await razorpayService.maybeSendPaymentRequestEmail(req, failedReg._id);
     }
     return res.redirect(`${failRedirectBase}?status=failed&reason=${encodeURIComponent(errorMsg)}`);
   }
@@ -837,16 +868,27 @@ app.post("/api/razorpay/webhook", async (req, res) => {
   const signature = req.headers["x-razorpay-signature"];
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-  if (webhookSecret && signature) {
-    const expectedSignature = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(JSON.stringify(req.body))
-      .digest("hex");
+  // An unsigned or unverifiable payload must never be allowed to mark a
+  // registration/sponsorship as paid — that's an unauthenticated write path
+  // into the database. Missing server config is a misconfiguration to fix,
+  // not a reason to fall back to trusting the caller.
+  if (!webhookSecret) {
+    console.error("❌ RAZORPAY_WEBHOOK_SECRET is not configured — refusing to process unauthenticated webhook payload.");
+    return res.status(200).json({ status: "ignored", reason: "webhook_secret_not_configured" });
+  }
+  if (!signature) {
+    console.warn("⚠️ RAZORPAY_WEBHOOK_MISSING_SIGNATURE");
+    return res.status(400).send("Missing Webhook Signature");
+  }
 
-    if (expectedSignature !== signature) {
-      console.warn("⚠️ RAZORPAY_WEBHOOK_SIGNATURE_MISMATCH");
-      return res.status(400).send("Invalid Webhook Signature");
-    }
+  const expectedSignature = crypto
+    .createHmac("sha256", webhookSecret)
+    .update(JSON.stringify(req.body))
+    .digest("hex");
+
+  if (expectedSignature !== signature) {
+    console.warn("⚠️ RAZORPAY_WEBHOOK_SIGNATURE_MISMATCH");
+    return res.status(400).send("Invalid Webhook Signature");
   }
 
   const event = req.body?.event;
@@ -936,10 +978,12 @@ app.post("/api/register", async (req, res) => {
 
   if (!isValid) {
     if (razorpay_order_id) {
-      await Registration.findOneAndUpdate(
+      const failedReg = await Registration.findOneAndUpdate(
         { razorpayOrderId: razorpay_order_id },
-        { paymentStatus: "Failed", failureReason: "Payment signature verification failed" }
+        { paymentStatus: "Failed", failureReason: "Payment signature verification failed" },
+        { new: true }
       );
+      if (failedReg) await razorpayService.maybeSendPaymentRequestEmail(req, failedReg._id);
     }
     return res.status(400).json({
       error: "PAYMENT_VERIFICATION_FAILED",

@@ -57,7 +57,8 @@ const RegistrationSchema = new mongoose.Schema({
   failureReason: { type: String, default: "" },
   paymentToken: { type: String, default: null, index: true },
   paymentTokenExpiresAt: { type: Date, default: null },
-  paymentTokenUsed: { type: Boolean, default: false }
+  paymentTokenUsed: { type: Boolean, default: false },
+  paymentRequestEmailSentAt: { type: Date, default: null }
 }, { timestamps: true });
 
 const AdminUserSchema = new mongoose.Schema({

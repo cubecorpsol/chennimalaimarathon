@@ -12,13 +12,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const statusParam = urlParams.get("status");
 
   // Handle PayU redirect return (surl/furl → pay.html?status=...)
+  // Note: the redirect URL deliberately carries no name/email (avoids leaking
+  // PII into browser history, server logs, and analytics) — this state is
+  // rendered generically rather than personalized from the query string.
   if (statusParam === "success") {
     renderSuccessState({
       tshirtNumber: urlParams.get("bib") || "Assigned",
       category: urlParams.get("category") || "Marathon"
     }, {
-      fullName: urlParams.get("name") || "Runner",
-      email: urlParams.get("email") || "",
+      fullName: "",
+      email: "",
       category: urlParams.get("category") || "Marathon"
     });
     if (window.history && window.history.replaceState) {
@@ -103,19 +106,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function renderSuccessState(result, reg) {
     const bib = result.tempBibNumber || result.tshirtNumber || "Assigned";
+    const greeting = reg.fullName ? `Congratulations <strong>${escapeHtml(reg.fullName)}</strong>! Your` : "Your";
+    const emailNote = reg.email
+      ? `A confirmation receipt email has been dispatched to <strong>${escapeHtml(reg.email)}</strong>.`
+      : "A confirmation receipt email has been dispatched to your registered email address.";
     container.innerHTML = `
       <div class="state-card success">
         <i class="fa-solid fa-circle-check"></i>
         <h3>Payment Successful!</h3>
-        <p>Congratulations <strong>${escapeHtml(reg.fullName)}</strong>! Your registration payment for <strong>${escapeHtml(reg.category || result.category || "Marathon")}</strong> has been received successfully.</p>
-        
+        <p>${greeting} registration payment for <strong>${escapeHtml(reg.category || result.category || "Marathon")}</strong> has been received successfully.</p>
+
         <div style="background: #fff8e6; border: 1px solid #ffe58f; border-radius: 10px; padding: 18px; margin: 20px 0; text-align: center;">
           <div style="font-size: 12px; color: #8c6b00; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">TEMPORARY BIB NUMBER</div>
           <div style="font-size: 28px; font-weight: 800; color: #d97706; font-family: 'Poppins', sans-serif; margin: 4px 0;">#${escapeHtml(bib)}</div>
           <div style="font-size: 12px; color: #92400e; font-weight: 600; margin-top: 6px;">📌 Note: The BIB number assigned currently is temporary. Your confirmed permanent BIB number will be shared two days before the marathon.</div>
         </div>
 
-        <p style="font-size: 13px; color: #64748b; margin-bottom: 24px;">A confirmation receipt email has been dispatched to <strong>${escapeHtml(reg.email || "")}</strong>.</p>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 24px;">${emailNote}</p>
 
         <a href="index.html" class="btn-pay-now" style="text-decoration: none; max-width: 220px; margin: 0 auto; padding: 12px 20px; font-size: 15px;">
           <i class="fa-solid fa-house"></i> Go to Homepage

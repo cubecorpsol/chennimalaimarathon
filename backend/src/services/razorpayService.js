@@ -3,7 +3,68 @@ const Razorpay = require("razorpay");
 const { Settings, Registration } = require("../db");
 const sheets = require("./sheetsService");
 const payuService = require("./payuService");
+const emailService = require("./emailService");
 const { getBaseUrl, isDevelopment, isProduction } = require("../config");
+
+// A non-success outcome must never be re-emailed on every retry the user makes,
+// so re-sends are throttled and the link is only regenerated once it's actually gone stale.
+const PAYMENT_REQUEST_EMAIL_COOLDOWN_MS = 15 * 60 * 1000;
+const PAYMENT_TOKEN_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
+const PAYMENT_REQUEST_EMAIL_TIMEOUT_MS = 12000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(() => {
+        console.error(`⏱️ ${label}_TIMEOUT after ${ms}ms`);
+        resolve(false);
+      }, ms);
+    })
+  ]);
+}
+
+/**
+ * Sends a "complete your payment" retry email for a registration that did NOT
+ * end in Success, reusing the same secure token/link infra as admin-issued
+ * payment links. Re-fetches the record fresh (never trusts a possibly-stale
+ * caller-held doc) and is a no-op if the payment has since succeeded elsewhere
+ * (webhook race) or a request email already went out within the cooldown window.
+ */
+async function maybeSendPaymentRequestEmail(req, registrationId) {
+  if (!registrationId) return false;
+  try {
+    const reg = await Registration.findById(registrationId);
+    if (!reg || reg.paymentStatus === "Success") return false;
+
+    if (reg.paymentRequestEmailSentAt &&
+        (Date.now() - new Date(reg.paymentRequestEmailSentAt).getTime()) < PAYMENT_REQUEST_EMAIL_COOLDOWN_MS) {
+      return false;
+    }
+
+    const tokenStillValid = reg.paymentToken && !reg.paymentTokenUsed &&
+      reg.paymentTokenExpiresAt && new Date() < new Date(reg.paymentTokenExpiresAt);
+    if (!tokenStillValid) {
+      reg.paymentToken = crypto.randomBytes(24).toString("hex");
+      reg.paymentTokenExpiresAt = new Date(Date.now() + PAYMENT_TOKEN_VALIDITY_MS);
+      reg.paymentTokenUsed = false;
+    }
+    reg.paymentRequestEmailSentAt = new Date();
+    await reg.save();
+
+    const frontendUrl = getBaseUrl(req, "FRONTEND_URL");
+    const payLink = `${frontendUrl}/pay.html?token=${encodeURIComponent(reg.paymentToken)}`;
+
+    return await withTimeout(
+      emailService.sendPaymentRequestEmail(reg, payLink, isDevelopment()),
+      PAYMENT_REQUEST_EMAIL_TIMEOUT_MS,
+      "PAYMENT_REQUEST_EMAIL"
+    );
+  } catch (err) {
+    console.error("PAYMENT_REQUEST_EMAIL_FAILED:", err?.message || err);
+    return false;
+  }
+}
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "dummy_key",
@@ -244,19 +305,23 @@ async function handlePaymentPending(req, res) {
   try {
     const { formData, orderId, reason } = req.body || {};
     const emailLower = String(formData?.email || "").trim().toLowerCase();
+    let reg = null;
 
     if (orderId) {
-      await Registration.findOneAndUpdate(
+      reg = await Registration.findOneAndUpdate(
         { razorpayOrderId: orderId },
-        { paymentStatus: "Pending", failureReason: reason || "User closed payment window without paying" }
+        { paymentStatus: "Pending", failureReason: reason || "User closed payment window without paying" },
+        { new: true }
       );
     } else if (emailLower) {
-      await Registration.findOneAndUpdate(
+      reg = await Registration.findOneAndUpdate(
         { email: emailLower, paymentStatus: "Pending" },
         { failureReason: reason || "User closed payment window without paying" },
-        { sort: { createdAt: -1 } }
+        { sort: { createdAt: -1 }, new: true }
       );
     }
+
+    if (reg) await maybeSendPaymentRequestEmail(req, reg._id);
 
     return res.json({ success: true, recorded: true });
   } catch (err) {
@@ -269,19 +334,23 @@ async function handlePaymentFailure(req, res) {
   try {
     const { formData, orderId, reason } = req.body || {};
     const emailLower = String(formData?.email || "").trim().toLowerCase();
+    let reg = null;
 
     if (orderId) {
-      await Registration.findOneAndUpdate(
+      reg = await Registration.findOneAndUpdate(
         { razorpayOrderId: orderId },
-        { paymentStatus: "Failed", failureReason: reason || "Transaction declined by gateway" }
+        { paymentStatus: "Failed", failureReason: reason || "Transaction declined by gateway" },
+        { new: true }
       );
     } else if (emailLower) {
-      await Registration.findOneAndUpdate(
+      reg = await Registration.findOneAndUpdate(
         { email: emailLower, paymentStatus: "Pending" },
         { paymentStatus: "Failed", failureReason: reason || "Transaction declined by gateway" },
-        { sort: { createdAt: -1 } }
+        { sort: { createdAt: -1 }, new: true }
       );
     }
+
+    if (reg) await maybeSendPaymentRequestEmail(req, reg._id);
 
     return res.json({ success: true, recorded: true });
   } catch (err) {
@@ -330,6 +399,7 @@ module.exports = {
   handlePaymentFailure,
   createRazorpayOrder,
   verifySignature,
+  maybeSendPaymentRequestEmail,
   isDevelopment,
   isProduction,
   shouldBypassLiveCheckout
