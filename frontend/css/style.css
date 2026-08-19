@@ -569,6 +569,8 @@ table { max-width: 100%; }
 .faq-answer { max-height: 0; overflow: hidden; transition: max-height .25s ease; background: #eef4fb; }
 .faq-item.open .faq-answer { max-height: 300px; }
 .faq-answer p { padding: 0 22px 20px 74px; font-size: 14px; color: var(--text-gray); line-height: 1.6; margin: 0; }
+.faq-answer ul { padding: 0 22px 20px 94px; margin: 0; font-size: 14px; color: var(--text-gray); line-height: 1.7; list-style: disc; }
+.faq-answer ul + p { padding-top: 0; }
 
 /* =========================================================
    CONTACT PAGE
@@ -1135,6 +1137,20 @@ table { max-width: 100%; }
 }
 .alert-modal-btn:hover { background: var(--green); }
 
+/* T-Shirt Size Chart link + modal */
+.size-chart-link {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700;
+  color: var(--orange); text-decoration: none; margin-top: -2px; width: fit-content;
+}
+.size-chart-link:hover { text-decoration: underline; color: var(--green); }
+.size-chart-table th { background: #f6f9f6; color: var(--navy); font-size: 13px; }
+.size-chart-table td { font-size: 13px; }
+.size-chart-warning { font-size: 12.5px; color: #d9455f; font-weight: 600; margin-top: 14px; margin-bottom: 0; }
+@media (max-width: 576px) {
+  #sizeChartModal .modal-dialog { margin: 0.5rem; }
+  .size-chart-table { font-size: 12px; }
+}
+
 /* Info box — "Why do we need this information?" */
 .info-box {
   display: flex; align-items: flex-start; gap: 16px; background: #f6f9f6;
@@ -1237,6 +1253,7 @@ table { max-width: 100%; }
   .footer-copy { text-align: center; }
   .quote-box { display: none; }
   .faq-answer p { padding-left: 22px; }
+  .faq-answer ul { padding-left: 42px; }
   .form-row { grid-template-columns: 1fr; }
   .register-form-panel { padding: 40px 24px; }
 }
