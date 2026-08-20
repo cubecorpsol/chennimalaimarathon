@@ -70,9 +70,17 @@ const AdminUserSchema = new mongoose.Schema({
   otpExpiresAt: { type: Date, default: null }
 }, { timestamps: true });
 
+const ContactMessageSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  phone: { type: String, required: true },
+  email: { type: String, required: true, index: true },
+  message: { type: String, required: true }
+}, { timestamps: true });
+
 const Settings = mongoose.models.Settings || mongoose.model("Settings", SettingsSchema);
 const Registration = mongoose.models.Registration || mongoose.model("Registration", RegistrationSchema);
 const AdminUser = mongoose.models.AdminUser || mongoose.model("AdminUser", AdminUserSchema);
+const ContactMessage = mongoose.models.ContactMessage || mongoose.model("ContactMessage", ContactMessageSchema);
 
 const SponsorshipSchema = new mongoose.Schema({
   sponsorId: { type: String, default: "N/A" },
@@ -231,6 +239,7 @@ module.exports = {
   Settings,
   Registration,
   AdminUser,
-  Sponsorship
+  Sponsorship,
+  ContactMessage
 };
 

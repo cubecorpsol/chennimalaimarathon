@@ -12,7 +12,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
 
-const { connectDB, Settings, Registration, AdminUser, Sponsorship } = require("./db");
+const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
@@ -1067,6 +1067,77 @@ app.post("/api/register", async (req, res) => {
     registeredSoFar: newSuccessCount,
     closed
   });
+});
+
+// Contact Form — Security Check (math captcha)
+// Stateless: the challenge numbers are embedded in a short-lived signed JWT instead
+// of server-side session storage, so it works the same on serverless cold starts.
+app.get("/api/captcha", (req, res) => {
+  const a = Math.floor(Math.random() * 8) + 1;
+  const b = Math.floor(Math.random() * 8) + 1;
+  const token = jwt.sign({ a, b }, JWT_SECRET, { expiresIn: "10m" });
+  res.json({ question: `${a} + ${b}`, token });
+});
+
+// Public Contact Form Submission
+app.post("/api/contact", async (req, res) => {
+  try {
+    const data = req.body || {};
+    const name = String(data.name || "").trim();
+    const phone = String(data.phone || "").trim();
+    const email = String(data.email || "").trim().toLowerCase();
+    const message = String(data.message || "").trim();
+    const { captchaToken, captchaAnswer, website } = data;
+
+    // Honeypot: a real visitor never sees or fills this field, since it's hidden
+    // off-screen. A bot that blindly fills every input trips it. Pretend success
+    // so the bot has no signal to adapt to.
+    if (String(website || "").trim() !== "") {
+      return res.json({ success: true, message: "Thank you for reaching out. We'll get back to you soon." });
+    }
+
+    if (!name || !phone || !email || !message) {
+      return res.status(400).json({ error: "MISSING_FIELDS", message: "Name, mobile number, email, and message are all required." });
+    }
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ error: "INVALID_PHONE", message: "Enter a valid 10 digit mobile number." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "INVALID_EMAIL", message: "Enter a valid email address." });
+    }
+
+    if (!captchaToken || captchaAnswer === undefined || captchaAnswer === null || String(captchaAnswer).trim() === "") {
+      return res.status(400).json({ error: "MISSING_CAPTCHA", message: "Please answer the security check." });
+    }
+    let captchaPayload;
+    try {
+      captchaPayload = jwt.verify(captchaToken, JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: "CAPTCHA_EXPIRED", message: "Security check expired. Please try the new one." });
+    }
+    if (Number(captchaAnswer) !== captchaPayload.a + captchaPayload.b) {
+      return res.status(400).json({ error: "WRONG_CAPTCHA", message: "That answer isn't right. Please try the new one." });
+    }
+
+    // Duplicate guard: the same person double-submitting (double-click, resubmit
+    // after a slow response) shouldn't create a second identical record or email.
+    const recentDuplicate = await ContactMessage.findOne({
+      email, phone, message,
+      createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
+    });
+    if (recentDuplicate) {
+      return res.json({ success: true, message: "You've already sent this message. We'll get back to you soon." });
+    }
+
+    const contactMessage = await ContactMessage.create({ name, phone, email, message });
+
+    await settleTask(() => emailService.sendContactEmail(contactMessage, isDevelopment()), "CONTACT_EMAIL");
+
+    res.json({ success: true, message: "Thank you for reaching out. We'll get back to you soon." });
+  } catch (err) {
+    console.error("CONTACT_SUBMIT_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: "Failed to submit your message. Please try again." });
+  }
 });
 
 // Admin routes have been moved to the standalone chennimalaimarathon-admin project.

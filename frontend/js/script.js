@@ -1583,3 +1583,165 @@ document.addEventListener('DOMContentLoaded', function () {
     handleSponsorshipSubmission();
   });
 });
+
+/* ============================================================
+   Contact Form (contact.html)
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', function () {
+  var contactForm = document.getElementById('contactForm');
+  if (!contactForm) return; // Not on the contact page — nothing to do.
+
+  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
+
+  var contactSubmitBtn = document.getElementById('contactSubmitBtn');
+  var captchaQuestionEl = document.getElementById('cCaptchaQuestion');
+  var captchaAnswerInput = document.getElementById('cCaptchaAnswer');
+  var captchaRefreshBtn = document.getElementById('cCaptchaRefresh');
+  var currentCaptchaToken = null;
+
+  /* ---------------------------------------------------------
+     Confirmation Popup (mirrors the site's alert-modal design)
+  --------------------------------------------------------- */
+  var cModalOverlay = document.getElementById('cAlertModalOverlay');
+  var cModalMessage = document.getElementById('cAlertModalMessage');
+  var cModalIcon = document.getElementById('cAlertModalIcon');
+  var cModalClose = document.getElementById('cAlertModalClose');
+
+  function showContactModal(message, isSuccess) {
+    if (!cModalOverlay || !cModalMessage) {
+      window.alert(message);
+      return;
+    }
+    cModalMessage.textContent = message;
+    if (cModalIcon) {
+      cModalIcon.classList.toggle('success', !!isSuccess);
+      cModalIcon.innerHTML = isSuccess
+        ? '<i class="fa-solid fa-circle-check"></i>'
+        : '<i class="fa-solid fa-circle-exclamation"></i>';
+    }
+    cModalOverlay.classList.add('open');
+    if (cModalClose) cModalClose.focus();
+  }
+
+  function closeContactModal() {
+    if (cModalOverlay) cModalOverlay.classList.remove('open');
+  }
+
+  if (cModalClose) cModalClose.addEventListener('click', closeContactModal);
+  if (cModalOverlay) {
+    cModalOverlay.addEventListener('click', function (e) {
+      if (e.target === cModalOverlay) closeContactModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && cModalOverlay && cModalOverlay.classList.contains('open')) {
+      closeContactModal();
+    }
+  });
+
+  /* ---------------------------------------------------------
+     Security Check (math captcha) — fetched fresh on load and
+     re-fetched after every failed attempt so a stale/used
+     question can't be resubmitted.
+  --------------------------------------------------------- */
+  async function loadCaptcha() {
+    if (captchaQuestionEl) captchaQuestionEl.textContent = 'Loading…';
+    try {
+      var res = await fetch(BACKEND_URL + "/api/captcha");
+      var data = await res.json();
+      currentCaptchaToken = data.token;
+      if (captchaQuestionEl) captchaQuestionEl.textContent = 'What is ' + data.question + '?';
+    } catch (err) {
+      console.error("Captcha load error:", err);
+      if (captchaQuestionEl) captchaQuestionEl.textContent = 'Unavailable — click refresh to retry.';
+    }
+    if (captchaAnswerInput) captchaAnswerInput.value = '';
+  }
+
+  loadCaptcha();
+  if (captchaRefreshBtn) captchaRefreshBtn.addEventListener('click', loadCaptcha);
+
+  function showCError(id, msg) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = msg;
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.add('has-error');
+  }
+
+  function clearCError(id) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = '';
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.remove('has-error');
+  }
+
+  ['cName', 'cPhone', 'cEmail', 'cMessage', 'cCaptchaAnswer'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function () { clearCError(id); });
+  });
+
+  async function handleContactSubmission() {
+    var name = document.getElementById('cName').value.trim();
+    var phone = document.getElementById('cPhone').value.trim();
+    var email = document.getElementById('cEmail').value.trim();
+    var message = document.getElementById('cMessage').value.trim();
+    var captchaAnswer = captchaAnswerInput ? captchaAnswerInput.value.trim() : '';
+    var website = document.getElementById('cWebsite') ? document.getElementById('cWebsite').value.trim() : '';
+
+    var isValid = true;
+
+    if (!name) { showCError('cName', 'Full name is required.'); isValid = false; }
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) { showCError('cPhone', 'Enter a valid 10 digit mobile number.'); isValid = false; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showCError('cEmail', 'Enter a valid email address.'); isValid = false; }
+    if (!message) { showCError('cMessage', 'Please enter a message.'); isValid = false; }
+    if (!captchaAnswer) { showCError('cCaptchaAnswer', 'Please answer the security check.'); isValid = false; }
+
+    if (!isValid) return;
+
+    // contactSubmitBtn is disabled for the full request round-trip below, so a
+    // double-click (or a bot firing repeated submits) can't fire a second request
+    // while the first is still in flight.
+    var originalText = contactSubmitBtn.textContent;
+    contactSubmitBtn.disabled = true;
+    contactSubmitBtn.textContent = "Sending...";
+
+    try {
+      var res = await fetch(BACKEND_URL + "/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name, phone: phone, email: email, message: message,
+          captchaToken: currentCaptchaToken, captchaAnswer: captchaAnswer,
+          website: website
+        })
+      });
+      var result = await res.json();
+
+      if (!res.ok || !result.success) {
+        if (result.error === 'WRONG_CAPTCHA' || result.error === 'CAPTCHA_EXPIRED' || result.error === 'MISSING_CAPTCHA') {
+          showCError('cCaptchaAnswer', result.message || 'Security check failed. Please try the new one.');
+          loadCaptcha();
+        } else {
+          showContactModal(result.message || "Something went wrong. Please try again.", false);
+        }
+        return;
+      }
+
+      showContactModal(result.message || "Thank you! Your message has been sent. We'll get back to you soon.", true);
+      contactForm.reset();
+      loadCaptcha();
+    } catch (err) {
+      console.error("Contact form error:", err);
+      showContactModal("Could not connect to the server. Please try again later.", false);
+    } finally {
+      contactSubmitBtn.disabled = false;
+      contactSubmitBtn.textContent = originalText;
+    }
+  }
+
+  contactSubmitBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    handleContactSubmission();
+  });
+});

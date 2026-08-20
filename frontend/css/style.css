@@ -590,7 +590,10 @@ table { max-width: 100%; }
 /* =========================================================
    CONTACT PAGE
 ========================================================= */
-.contact-body { padding: 70px 0; text-align: center; }
+/* padding-top: 0 — the form section above already carries the gap via its own
+   bottom padding; matches the site's existing convention for stacked sections
+   (see index.html's back-to-back .section blocks) so gaps don't double up. */
+.contact-body { padding: 0 0 70px; text-align: center; }
 .contact-icon { display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; margin: 0 auto 16px; border-radius: 50%; background: #e3ecfb; color: var(--blue-icon); font-size: 20px; }
 .contact-icon.green { background: #e5f3ea; color: var(--green); }
 .contact-block h4 { font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 10px; }
@@ -602,6 +605,31 @@ table { max-width: 100%; }
 .contact-divider .line.green { background: var(--green); }
 .contact-divider .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--navy); }
 .contact-block p.query-text { font-size: 15px; color: var(--text-dark); }
+
+/* Contact Form Section — reuses the site's .register-form-panel/.register-card
+   system (same as register.html / sponsors.html) so it inherits the same
+   responsive behavior; these rules only adjust the parts specific to this page.
+   (Deliberately NOT using the .register-section class itself — that class is
+   also used in script.js as a page-detection guard for the registration/
+   payment flow, and picking it up here would run that unrelated logic.) */
+.contact-form-section { display: flex; min-height: auto; padding: 70px 0; }
+.contact-form-section .register-form-panel { flex: 0 0 100%; max-width: 560px; margin: 0 auto; }
+.contact-form-section .register-card { max-width: 520px; }
+.contact-form-section .form-title { text-align: center; }
+.contact-form-section .form-title-underline { margin: 10px auto 24px; }
+.message-wrap { align-items: flex-start; height: auto; }
+.message-wrap i { top: 17px; }
+.contact-form-status { text-align: center; font-size: 14px; font-weight: 600; min-height: 18px; margin-bottom: 10px; }
+
+/* Honeypot field — off-screen, unreachable by tab, invisible to real visitors;
+   left unfilled by humans but auto-filled by unsophisticated form-spam bots. */
+.hp-field { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+.captcha-question-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-dark); font-weight: 600; margin-bottom: 4px; }
+.captcha-refresh-btn { background: none; border: none; color: var(--text-gray); font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: color .2s ease, background .2s ease; }
+.captcha-refresh-btn:hover { color: var(--green-dark); background: #f0fdf4; }
+
+.alert-modal-icon.success { background: #e5f3ea; color: var(--green); }
 
 /* =========================================================
    SPONSORS / SPONSORSHIP
@@ -1002,6 +1030,22 @@ table { max-width: 100%; }
 .input-wrap select { padding-right: 30px; }
 .input-wrap input:focus, .input-wrap select:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(31,109,63,0.12); }
 .input-wrap.has-error input, .input-wrap.has-error select { border-color: #d9455f; }
+#contactForm .input-wrap input,
+#contactForm .input-wrap textarea { border-color: #b6bec8; }
+#contactForm .input-wrap textarea {
+  width: 100%;
+  padding: 13px 14px 13px 40px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--text-dark);
+  background: #fff;
+  resize: vertical;
+  min-height: 110px;
+}
+#contactForm .input-wrap textarea::placeholder { color: #9aa3ad; }
+#contactForm .input-wrap textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(31,109,63,0.12); }
+#contactForm .input-wrap.has-error textarea { border-color: #d9455f; }
 .field-error { font-size: 12px; color: #d9455f; min-height: 16px; margin-top: -2px; }
 .field-hint { font-size: 12px; color: var(--green-dark); margin-top: -2px; }
 
@@ -1256,7 +1300,8 @@ table { max-width: 100%; }
   .section { padding: 50px 0; }
   .section-heading { margin-bottom: 16px; }
   .founder-card { padding: 24px 22px; }
-  .contact-body { padding: 50px 0; }
+  .contact-body { padding: 0 0 50px; }
+  .contact-form-section { padding: 50px 0; }
   .why-section { flex-direction: column; }
   .race-cats { flex-direction: column; align-items: center; }
   .movement-item { flex: 1 1 100%; border-right: none !important; padding-bottom: 20px; border-bottom: 1px solid var(--border-gray); }

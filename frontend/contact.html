@@ -109,8 +109,88 @@
   </div>
 </section>
 
+<!-- ===================== CONTACT FORM ===================== -->
+<section class="contact-form-section">
+  <div class="register-inner">
+    <div class="register-form-panel">
+      <div class="register-card">
+        <h2 class="form-title">SEND US A MESSAGE</h2>
+        <div class="form-title-underline"></div>
+
+        <form id="contactForm" autocomplete="off">
+          <div class="form-group">
+            <label for="cName">Full Name <span class="required-star">*</span></label>
+            <div class="input-wrap" id="cName-wrap">
+              <i class="fa-solid fa-user"></i>
+              <input type="text" id="cName" placeholder="Enter your full name">
+            </div>
+            <div class="field-error" id="cName-error"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="cPhone">Mobile Number <span class="required-star">*</span></label>
+            <div class="input-wrap" id="cPhone-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="cPhone" placeholder="Enter 10 digit mobile number" maxlength="10">
+            </div>
+            <div class="field-error" id="cPhone-error"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="cEmail">Email Address <span class="required-star">*</span></label>
+            <div class="input-wrap" id="cEmail-wrap">
+              <i class="fa-regular fa-envelope"></i>
+              <input type="email" id="cEmail" placeholder="Enter your email address">
+            </div>
+            <div class="field-error" id="cEmail-error"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="cMessage">Message <span class="required-star">*</span></label>
+            <div class="input-wrap message-wrap" id="cMessage-wrap">
+              <i class="fa-solid fa-comment"></i>
+              <textarea id="cMessage" rows="5" placeholder="How can we help you?"></textarea>
+            </div>
+            <div class="field-error" id="cMessage-error"></div>
+          </div>
+
+          <!-- Honeypot: hidden from real users, tempting to bots that auto-fill every field -->
+          <div class="hp-field" aria-hidden="true">
+            <label for="cWebsite">Leave this field blank</label>
+            <input type="text" id="cWebsite" name="website" tabindex="-1" autocomplete="off">
+          </div>
+
+          <div class="form-group">
+            <label for="cCaptchaAnswer">Security Check <span class="required-star">*</span></label>
+            <div class="captcha-question-row">
+              <span id="cCaptchaQuestion">What is …?</span>
+              <button type="button" id="cCaptchaRefresh" class="captcha-refresh-btn" title="Get a new question" aria-label="Get a new security question"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+            <div class="input-wrap" id="cCaptchaAnswer-wrap">
+              <i class="fa-solid fa-shield-halved"></i>
+              <input type="text" id="cCaptchaAnswer" placeholder="Enter the answer" inputmode="numeric" autocomplete="off">
+            </div>
+            <div class="field-error" id="cCaptchaAnswer-error"></div>
+          </div>
+
+          <button type="button" class="btn-continue" id="contactSubmitBtn">SEND MESSAGE</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTACT CONFIRMATION MODAL ===================== -->
+<div class="alert-modal-overlay" id="cAlertModalOverlay">
+  <div class="alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="cAlertModalMessage">
+    <span class="alert-modal-icon" id="cAlertModalIcon"><i class="fa-solid fa-circle-check"></i></span>
+    <div class="alert-modal-message" id="cAlertModalMessage"></div>
+    <button type="button" class="alert-modal-btn" id="cAlertModalClose">OK</button>
+  </div>
+</div>
+
 <!-- ===================== CONTACT INFO ===================== -->
-<section class="contact-body" style="padding-bottom:140px;">
+<section class="contact-body">
   <div class="container-custom">
     <div class="contact-block">
       <span class="contact-icon"><i class="fa-solid fa-envelope"></i></span>
