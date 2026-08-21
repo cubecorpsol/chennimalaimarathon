@@ -49,7 +49,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const data = await res.json();
 
     if (!res.ok || !data.success) {
-      if (data.isPaid) {
+      if (data.isClosed) {
+        renderErrorState("Payments Unavailable", data.message || "Online payment collection is temporarily unavailable. Please contact the marathon admin team.");
+      } else if (data.isPaid) {
         renderPaidState(data.message);
       } else if (data.isExpired) {
         renderExpiredState(data.message);

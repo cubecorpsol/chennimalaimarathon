@@ -16,7 +16,10 @@ const SettingsSchema = new mongoose.Schema({
   isOpen: { type: Boolean, default: true },
   showRemainingSlots: { type: Boolean, default: true },
   ageCutoff: { type: Number, default: 13 },
-  paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" }
+  paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" },
+  volunteerPageOpen: { type: Boolean, default: true },
+  volunteerPromoEnabled: { type: Boolean, default: true },
+  payPageOpen: { type: Boolean, default: true }
 }, { timestamps: true });
 
 const RegistrationSchema = new mongoose.Schema({
@@ -77,10 +80,23 @@ const ContactMessageSchema = new mongoose.Schema({
   message: { type: String, required: true }
 }, { timestamps: true });
 
+const VolunteerSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  age: { type: Number, required: true },
+  phone: { type: String, required: true },
+  email: { type: String, required: true, index: true },
+  district: { type: String, required: true },
+  tshirtSize: { type: String, required: true },
+  role: { type: String, required: true },
+  experience: { type: String, default: "No" },
+  message: { type: String, default: "" }
+}, { timestamps: true });
+
 const Settings = mongoose.models.Settings || mongoose.model("Settings", SettingsSchema);
 const Registration = mongoose.models.Registration || mongoose.model("Registration", RegistrationSchema);
 const AdminUser = mongoose.models.AdminUser || mongoose.model("AdminUser", AdminUserSchema);
 const ContactMessage = mongoose.models.ContactMessage || mongoose.model("ContactMessage", ContactMessageSchema);
+const Volunteer = mongoose.models.Volunteer || mongoose.model("Volunteer", VolunteerSchema);
 
 const SponsorshipSchema = new mongoose.Schema({
   sponsorId: { type: String, default: "N/A" },
@@ -240,6 +256,7 @@ module.exports = {
   Registration,
   AdminUser,
   Sponsorship,
-  ContactMessage
+  ContactMessage,
+  Volunteer
 };
 

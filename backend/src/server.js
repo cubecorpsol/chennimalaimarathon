@@ -12,7 +12,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
 
-const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage } = require("./db");
+const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage, Volunteer } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
@@ -178,7 +178,7 @@ app.get("/api/status", async (req, res) => {
     const settings = await Settings.findOne() || {
       adultFee: 150, kidsFee: 100, tshirtPrice: 0, pricingTitle: "Marathon Registration Fees",
       maxRegistrations: 1000, isOpen: true, showRemainingSlots: true, paymentGateway: "razorpay",
-      ageCutoff: 13
+      ageCutoff: 13, volunteerPageOpen: true, volunteerPromoEnabled: true
     };
 
     const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
@@ -197,6 +197,8 @@ app.get("/api/status", async (req, res) => {
       pricingTitle: settings.pricingTitle,
       ageCutoff: settings.ageCutoff || 13,
       paymentGateway: settings.paymentGateway || "razorpay",
+      volunteerPageOpen: settings.volunteerPageOpen !== false,
+      volunteerPromoEnabled: settings.volunteerPromoEnabled !== false,
       nodeEnv: process.env.NODE_ENV || "development",
       isDevelopment: isDevelopment()
     });
@@ -457,6 +459,11 @@ app.get("/api/payment-request/:token", async (req, res) => {
     const { token } = req.params;
     if (!token) return res.status(400).json({ error: "MISSING_TOKEN", message: "Payment token is required." });
 
+    const settings = await Settings.findOne() || { paymentGateway: "razorpay" };
+    if (settings.payPageOpen === false) {
+      return res.json({ success: false, isClosed: true, message: "Online payment collection is temporarily unavailable. Please contact the marathon admin team." });
+    }
+
     const reg = await Registration.findOne({ paymentToken: token });
     const check = isPaymentTokenInvalid(reg);
     if (check.invalid) {
@@ -469,7 +476,6 @@ app.get("/api/payment-request/:token", async (req, res) => {
       return res.status(404).json({ error: check.code || "INVALID_TOKEN", message: check.message });
     }
 
-    const settings = await Settings.findOne() || { paymentGateway: "razorpay" };
     const activeGateway = settings.paymentGateway || reg.paymentGateway || "razorpay";
 
     const regFee = reg.registrationFee || 0;
@@ -508,6 +514,11 @@ app.post("/api/create-order-for-token", async (req, res) => {
     const { token } = req.body || {};
     if (!token) return res.status(400).json({ error: "MISSING_TOKEN", message: "Token is required." });
 
+    const settings = await Settings.findOne() || { paymentGateway: "razorpay", isOpen: true, maxRegistrations: 1000 };
+    if (settings.payPageOpen === false) {
+      return res.status(403).json({ error: "PAY_PAGE_CLOSED", message: "Online payment collection is temporarily unavailable. Please contact the marathon admin team." });
+    }
+
     const reg = await Registration.findOne({ paymentToken: token });
     const check = isPaymentTokenInvalid(reg);
     if (check.invalid) {
@@ -516,7 +527,6 @@ app.post("/api/create-order-for-token", async (req, res) => {
       return res.status(404).json({ error: "INVALID_TOKEN", message: check.message });
     }
 
-    const settings = await Settings.findOne() || { paymentGateway: "razorpay", isOpen: true, maxRegistrations: 1000 };
     const successCount = await Registration.countDocuments({ paymentStatus: "Success" });
     if (!settings.isOpen || successCount >= settings.maxRegistrations) {
       return res.status(403).json({
@@ -1137,6 +1147,80 @@ app.post("/api/contact", async (req, res) => {
   } catch (err) {
     console.error("CONTACT_SUBMIT_ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR", message: "Failed to submit your message. Please try again." });
+  }
+});
+
+// Public Volunteer Application Submission
+app.post("/api/volunteer", async (req, res) => {
+  try {
+    const settings = await Settings.findOne().select("volunteerPageOpen");
+    if (settings && settings.volunteerPageOpen === false) {
+      return res.status(403).json({ error: "VOLUNTEER_CLOSED", message: "Volunteer applications are currently closed." });
+    }
+
+    const data = req.body || {};
+    const name = String(data.name || "").trim();
+    const age = Number(data.age);
+    const phone = String(data.phone || "").trim();
+    const email = String(data.email || "").trim().toLowerCase();
+    const district = String(data.district || "").trim();
+    const tshirtSize = String(data.tshirtSize || "").trim();
+    const role = String(data.role || "").trim();
+    const experience = String(data.experience || "No").trim();
+    const message = String(data.message || "").trim();
+    const { captchaToken, captchaAnswer, website } = data;
+
+    // Honeypot: a real visitor never sees or fills this field, since it's hidden
+    // off-screen. A bot that blindly fills every input trips it. Pretend success
+    // so the bot has no signal to adapt to.
+    if (String(website || "").trim() !== "") {
+      return res.json({ success: true, message: "Thank you for volunteering! We'll get back to you soon." });
+    }
+
+    if (!name || !phone || !email || !district || !tshirtSize || !role) {
+      return res.status(400).json({ error: "MISSING_FIELDS", message: "Please fill in all required fields." });
+    }
+    if (!age || isNaN(age) || age < 15 || age > 80) {
+      return res.status(400).json({ error: "INVALID_AGE", message: "Enter a valid age between 15 and 80." });
+    }
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ error: "INVALID_PHONE", message: "Enter a valid 10 digit mobile number." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "INVALID_EMAIL", message: "Enter a valid email address." });
+    }
+
+    if (!captchaToken || captchaAnswer === undefined || captchaAnswer === null || String(captchaAnswer).trim() === "") {
+      return res.status(400).json({ error: "MISSING_CAPTCHA", message: "Please answer the security check." });
+    }
+    let captchaPayload;
+    try {
+      captchaPayload = jwt.verify(captchaToken, JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: "CAPTCHA_EXPIRED", message: "Security check expired. Please try the new one." });
+    }
+    if (Number(captchaAnswer) !== captchaPayload.a + captchaPayload.b) {
+      return res.status(400).json({ error: "WRONG_CAPTCHA", message: "That answer isn't right. Please try the new one." });
+    }
+
+    // Duplicate guard: the same person double-submitting (double-click, resubmit
+    // after a slow response) shouldn't create a second identical record or email.
+    const recentDuplicate = await Volunteer.findOne({
+      email, phone,
+      createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }
+    });
+    if (recentDuplicate) {
+      return res.json({ success: true, message: "You've already submitted a volunteer application. We'll get back to you soon." });
+    }
+
+    const volunteer = await Volunteer.create({ name, age, phone, email, district, tshirtSize, role, experience, message });
+
+    await settleTask(() => emailService.sendVolunteerEmail(volunteer, isDevelopment()), "VOLUNTEER_EMAIL");
+
+    res.json({ success: true, message: "Thank you for volunteering! We'll get back to you soon." });
+  } catch (err) {
+    console.error("VOLUNTEER_SUBMIT_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: "Failed to submit your application. Please try again." });
   }
 });
 

@@ -550,4 +550,85 @@ async function sendContactEmail(record, isDev = false) {
   }
 }
 
-module.exports = { sendRegistrationEmail, sendSponsorshipEmail, sendPaymentRequestEmail, sendContactEmail };
+function buildVolunteerEmailHTML(record, isDev) {
+  const contentHtml = `
+    ${isDev ? '<div style="background:#fff3cd;color:#856404;padding:12px;margin-bottom:18px;border-radius:8px;font-weight:bold;font-size:13px;">⚠️ DEVELOPMENT MODE TEST EMAIL</div>' : ''}
+
+    <p style="font-size: 15px; color: #1e293b; margin-top: 0;">🙋 A new volunteer application was submitted through the website.</p>
+
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin: 20px 0;">
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" class="info-table" style="font-size: 14px; color: #334155;">
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600; width: 35%;">Name:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right;">${escapeHtml(record.name)}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Age:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;">${escapeHtml(record.age)}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Mobile Number:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;"><a href="tel:${escapeHtml(record.phone)}" style="color:#1f6d3f; font-weight:700; text-decoration:none;">${escapeHtml(record.phone)}</a></td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Email Address:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right; word-break: break-all;"><a href="mailto:${escapeHtml(record.email)}" style="color:#1f6d3f; font-weight:700; text-decoration:none;">${escapeHtml(record.email)}</a></td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">District:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;">${escapeHtml(record.district)}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">T-Shirt Size:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;">${escapeHtml(record.tshirtSize)}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Preferred Role:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; font-weight: 700; text-align: right; color: #0d1f47;">${escapeHtml(record.role)}</td>
+        </tr>
+        <tr>
+          <td class="mobile-stack-cell" style="padding: 6px 0; color: #64748b; font-weight: 600;">Prior Experience:</td>
+          <td class="mobile-stack-cell mobile-val-right" style="padding: 6px 0; text-align: right;">${escapeHtml(record.experience)}</td>
+        </tr>
+      </table>
+    </div>
+
+    ${record.message ? `<div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #1f6d3f; padding: 14px 16px; border-radius: 8px;">
+      <p style="font-size: 13px; color: #0d1f47; margin: 0 0 8px 0; font-weight: 700;">Why they want to volunteer</p>
+      <p style="font-size: 14px; color: #334155; margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(record.message)}</p>
+    </div>` : ''}
+
+    <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">Received on ${new Date(record.createdAt || Date.now()).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST. Reply directly to this email to respond to ${escapeHtml(record.name)}.</p>
+  `;
+
+  return buildResponsiveEmailWrapper({
+    previewText: `New volunteer application from ${record.name}`,
+    headerSubtitle: "New Volunteer Application",
+    contentHtml
+  });
+}
+
+async function sendVolunteerEmail(record, isDev = false) {
+  const subject = `${isDev ? "[DEV] " : ""}New Volunteer Application from ${record.name}`;
+  const htmlContent = buildVolunteerEmailHTML(record, isDev);
+
+  const smtpObj = getTransporter();
+  if (!smtpObj) return false;
+
+  try {
+    const info = await smtpObj.transporter.sendMail({
+      from: smtpObj.senderEmail,
+      to: "info@chennimalaimarathon.com",
+      replyTo: record.email,
+      subject: subject,
+      html: htmlContent
+    });
+    console.log(`✉️ [ZEPTOMAIL SMTP] Volunteer application email sent to info@chennimalaimarathon.com (messageId: ${info.messageId})`);
+    return true;
+  } catch (err) {
+    console.error(`❌ ZEPTOMAIL_SMTP_VOLUNTEER_EMAIL_SEND_ERROR:`, err.message);
+    return false;
+  }
+}
+
+module.exports = { sendRegistrationEmail, sendSponsorshipEmail, sendPaymentRequestEmail, sendContactEmail, sendVolunteerEmail };

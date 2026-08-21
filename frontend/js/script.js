@@ -1745,3 +1745,270 @@ document.addEventListener('DOMContentLoaded', function () {
     handleContactSubmission();
   });
 });
+
+/* ============================================================
+   Volunteer Form (volunteer.html)
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', function () {
+  var volunteerForm = document.getElementById('volunteerForm');
+  if (!volunteerForm) return; // Not on the volunteer page — nothing to do.
+
+  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
+
+  var volunteerSubmitBtn = document.getElementById('volunteerSubmitBtn');
+  var districtSelect = document.getElementById('vDistrict');
+  var captchaQuestionEl = document.getElementById('vCaptchaQuestion');
+  var captchaAnswerInput = document.getElementById('vCaptchaAnswer');
+  var captchaRefreshBtn = document.getElementById('vCaptchaRefresh');
+  var currentCaptchaToken = null;
+
+  /* ---------------------------------------------------------
+     Volunteer Page Open/Closed — controlled from the admin
+     Settings page. Swaps the form out for a closed notice.
+  --------------------------------------------------------- */
+  var volunteerClosedPanel = document.getElementById('volunteerClosedPanel');
+  var volunteerFormWrap = document.getElementById('volunteerFormWrap');
+
+  async function checkVolunteerPageStatus() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/status");
+      var data = await res.json();
+      if (data.volunteerPageOpen === false) {
+        if (volunteerClosedPanel) volunteerClosedPanel.style.display = "";
+        if (volunteerFormWrap) volunteerFormWrap.style.display = "none";
+      }
+    } catch (err) {
+      console.warn("Volunteer page status check error:", err);
+    }
+  }
+
+  checkVolunteerPageStatus();
+
+  var TN_DISTRICTS = [
+    'Ariyalur', 'Chengalpattu', 'Chennai', 'Coimbatore', 'Cuddalore',
+    'Dharmapuri', 'Dindigul', 'Erode', 'Kallakurichi', 'Kanchipuram',
+    'Kanyakumari', 'Karur', 'Krishnagiri', 'Madurai', 'Mayiladuthurai',
+    'Nagapattinam', 'Namakkal', 'Nilgiris', 'Perambalur', 'Pudukkottai',
+    'Ramanathapuram', 'Ranipet', 'Salem', 'Sivaganga', 'Tenkasi',
+    'Thanjavur', 'Theni', 'Thoothukudi', 'Tiruchirappalli', 'Tirunelveli',
+    'Tirupathur', 'Tiruppur', 'Tiruvallur', 'Tiruvannamalai', 'Tiruvarur',
+    'Vellore', 'Viluppuram', 'Virudhunagar', 'Other'
+  ];
+  if (districtSelect) {
+    TN_DISTRICTS.forEach(function (name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      districtSelect.appendChild(opt);
+    });
+  }
+
+  /* ---------------------------------------------------------
+     Confirmation Popup (mirrors the site's alert-modal design)
+  --------------------------------------------------------- */
+  var vModalOverlay = document.getElementById('vAlertModalOverlay');
+  var vModalMessage = document.getElementById('vAlertModalMessage');
+  var vModalIcon = document.getElementById('vAlertModalIcon');
+  var vModalClose = document.getElementById('vAlertModalClose');
+
+  function showVolunteerModal(message, isSuccess) {
+    if (!vModalOverlay || !vModalMessage) {
+      window.alert(message);
+      return;
+    }
+    vModalMessage.textContent = message;
+    if (vModalIcon) {
+      vModalIcon.classList.toggle('success', !!isSuccess);
+      vModalIcon.innerHTML = isSuccess
+        ? '<i class="fa-solid fa-circle-check"></i>'
+        : '<i class="fa-solid fa-circle-exclamation"></i>';
+    }
+    vModalOverlay.classList.add('open');
+    if (vModalClose) vModalClose.focus();
+  }
+
+  function closeVolunteerModal() {
+    if (vModalOverlay) vModalOverlay.classList.remove('open');
+  }
+
+  if (vModalClose) vModalClose.addEventListener('click', closeVolunteerModal);
+  if (vModalOverlay) {
+    vModalOverlay.addEventListener('click', function (e) {
+      if (e.target === vModalOverlay) closeVolunteerModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && vModalOverlay && vModalOverlay.classList.contains('open')) {
+      closeVolunteerModal();
+    }
+  });
+
+  /* ---------------------------------------------------------
+     Security Check (math captcha) — fetched fresh on load and
+     re-fetched after every failed attempt so a stale/used
+     question can't be resubmitted.
+  --------------------------------------------------------- */
+  async function loadCaptcha() {
+    if (captchaQuestionEl) captchaQuestionEl.textContent = 'Loading…';
+    try {
+      var res = await fetch(BACKEND_URL + "/api/captcha");
+      var data = await res.json();
+      currentCaptchaToken = data.token;
+      if (captchaQuestionEl) captchaQuestionEl.textContent = 'What is ' + data.question + '?';
+    } catch (err) {
+      console.error("Captcha load error:", err);
+      if (captchaQuestionEl) captchaQuestionEl.textContent = 'Unavailable — click refresh to retry.';
+    }
+    if (captchaAnswerInput) captchaAnswerInput.value = '';
+  }
+
+  loadCaptcha();
+  if (captchaRefreshBtn) captchaRefreshBtn.addEventListener('click', loadCaptcha);
+
+  function showVError(id, msg) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = msg;
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.add('has-error');
+  }
+
+  function clearVError(id) {
+    var errorEl = document.getElementById(id + '-error');
+    if (errorEl) errorEl.textContent = '';
+    var wrapEl = document.getElementById(id + '-wrap');
+    if (wrapEl) wrapEl.classList.remove('has-error');
+  }
+
+  ['vName', 'vAge', 'vPhone', 'vEmail', 'vDistrict', 'vTshirt', 'vRole', 'vCaptchaAnswer'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function () { clearVError(id); });
+  });
+
+  async function handleVolunteerSubmission() {
+    var name = document.getElementById('vName').value.trim();
+    var age = document.getElementById('vAge').value.trim();
+    var phone = document.getElementById('vPhone').value.trim();
+    var email = document.getElementById('vEmail').value.trim();
+    var district = districtSelect.value;
+    var tshirtSize = document.getElementById('vTshirt').value;
+    var role = document.getElementById('vRole').value;
+    var experience = document.getElementById('vExperience').value;
+    var message = document.getElementById('vMessage').value.trim();
+    var captchaAnswer = captchaAnswerInput ? captchaAnswerInput.value.trim() : '';
+    var website = document.getElementById('vWebsite') ? document.getElementById('vWebsite').value.trim() : '';
+
+    var isValid = true;
+
+    if (!name) { showVError('vName', 'Full name is required.'); isValid = false; }
+    var ageNum = Number(age);
+    if (!age || isNaN(ageNum) || ageNum < 15 || ageNum > 80) { showVError('vAge', 'Enter a valid age (15–80).'); isValid = false; }
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) { showVError('vPhone', 'Enter a valid 10 digit mobile number.'); isValid = false; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showVError('vEmail', 'Enter a valid email address.'); isValid = false; }
+    if (!district) { showVError('vDistrict', 'Please select your district.'); isValid = false; }
+    if (!tshirtSize) { showVError('vTshirt', 'Please select a T-shirt size.'); isValid = false; }
+    if (!role) { showVError('vRole', 'Please select a preferred role.'); isValid = false; }
+    if (!captchaAnswer) { showVError('vCaptchaAnswer', 'Please answer the security check.'); isValid = false; }
+
+    if (!isValid) return;
+
+    var originalText = volunteerSubmitBtn.textContent;
+    volunteerSubmitBtn.disabled = true;
+    volunteerSubmitBtn.textContent = "Submitting...";
+
+    try {
+      var res = await fetch(BACKEND_URL + "/api/volunteer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name, age: ageNum, phone: phone, email: email, district: district,
+          tshirtSize: tshirtSize, role: role, experience: experience, message: message,
+          captchaToken: currentCaptchaToken, captchaAnswer: captchaAnswer,
+          website: website
+        })
+      });
+      var result = await res.json();
+
+      if (!res.ok || !result.success) {
+        if (result.error === 'WRONG_CAPTCHA' || result.error === 'CAPTCHA_EXPIRED' || result.error === 'MISSING_CAPTCHA') {
+          showVError('vCaptchaAnswer', result.message || 'Security check failed. Please try the new one.');
+          loadCaptcha();
+        } else {
+          showVolunteerModal(result.message || "Something went wrong. Please try again.", false);
+        }
+        return;
+      }
+
+      showVolunteerModal(result.message || "Thank you for volunteering! We'll get back to you soon.", true);
+      volunteerForm.reset();
+      loadCaptcha();
+    } catch (err) {
+      console.error("Volunteer form error:", err);
+      showVolunteerModal("Could not connect to the server. Please try again later.", false);
+    } finally {
+      volunteerSubmitBtn.disabled = false;
+      volunteerSubmitBtn.textContent = originalText;
+    }
+  }
+
+  volunteerSubmitBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    handleVolunteerSubmission();
+  });
+});
+
+/* ============================================================
+   Volunteer Promo Modal (index.html)
+   Shown once per browser session, shortly after the home page
+   loads, pointing visitors to the volunteer sign-up page.
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', function () {
+  var promoOverlay = document.getElementById('volunteerPromoOverlay');
+  if (!promoOverlay) return; // Not on the home page — nothing to do.
+
+  var promoDismiss = document.getElementById('volunteerPromoDismiss');
+  var promoLater = document.getElementById('volunteerPromoLater');
+  var promoCta = document.getElementById('volunteerPromoCta');
+  var STORAGE_KEY = 'volunteerPromoShown';
+
+  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
+
+  function markShown() {
+    try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
+  }
+
+  function closePromo() {
+    promoOverlay.classList.remove('open');
+    markShown();
+  }
+
+  function openPromo() {
+    var alreadyShown = false;
+    try { alreadyShown = !!sessionStorage.getItem(STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
+    if (alreadyShown) return;
+    promoOverlay.classList.add('open');
+  }
+
+  if (promoDismiss) promoDismiss.addEventListener('click', closePromo);
+  if (promoLater) promoLater.addEventListener('click', closePromo);
+  if (promoCta) promoCta.addEventListener('click', markShown);
+  promoOverlay.addEventListener('click', function (e) {
+    if (e.target === promoOverlay) closePromo();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && promoOverlay.classList.contains('open')) closePromo();
+  });
+
+  // Popup visibility is controlled from the admin Settings page —
+  // only schedule it once we know it's enabled.
+  fetch(BACKEND_URL + "/api/status")
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (data.volunteerPromoEnabled === false) return;
+      setTimeout(openPromo, 1200);
+    })
+    .catch(function (err) {
+      console.warn("Volunteer promo status check error:", err);
+    });
+});

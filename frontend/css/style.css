@@ -632,6 +632,38 @@ table { max-width: 100%; }
 .alert-modal-icon.success { background: #e5f3ea; color: var(--green); }
 
 /* =========================================================
+   VOLUNTEER PAGE
+========================================================= */
+.volunteer-form-section { display: flex; min-height: auto; padding: 70px 0; }
+.volunteer-form-section .register-form-panel { flex: 0 0 100%; max-width: 620px; margin: 0 auto; }
+.volunteer-form-section .register-card { max-width: 580px; }
+.volunteer-form-section .form-title { text-align: center; }
+.volunteer-form-section .form-title-underline { margin: 10px auto 24px; }
+
+.section-subtext { font-size: 15px; color: var(--text-gray); margin-top: 6px; }
+
+/* padding-top: 0 — the form section above already carries the gap via its own
+   bottom padding, matching the site's stacked-section convention. */
+.benefits-section { padding: 0 0 70px; }
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  margin-top: 10px;
+}
+.benefit-card {
+  background: #fff;
+  border: 1px solid var(--border-gray);
+  border-radius: 12px;
+  padding: 30px 24px;
+  text-align: center;
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.benefit-card:hover { transform: translateY(-4px); box-shadow: 0 10px 26px rgba(0,0,0,0.08); }
+.benefit-card h4 { font-size: 17px; font-weight: 800; color: var(--navy); margin: 4px 0 8px; }
+.benefit-card p { font-size: 14px; color: var(--text-gray); line-height: 1.6; margin: 0; }
+
+/* =========================================================
    SPONSORS / SPONSORSHIP
 ========================================================= */
 .sponsors-empty { padding: 90px 0; text-align: center; }
@@ -1015,10 +1047,10 @@ table { max-width: 100%; }
 .form-group label i { color: var(--orange); font-size: 11px; margin-right: 3px; }
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap i { position: absolute; left: 14px; color: var(--text-gray); font-size: 14px; }
-.input-wrap input, .input-wrap select {
+.input-wrap input, .input-wrap select, .input-wrap textarea {
   width: 100%;
   padding: 13px 14px 13px 40px;
-  border: 1.5px solid var(--border-gray);
+  border: 1.5px solid #b6bec8;
   border-radius: 8px;
   font-size: 14px;
   font-family: var(--font-body);
@@ -1026,26 +1058,11 @@ table { max-width: 100%; }
   background: #fff;
   appearance: none;
 }
-.input-wrap input::placeholder { color: #9aa3ad; }
+.input-wrap input::placeholder, .input-wrap textarea::placeholder { color: #9aa3ad; }
 .input-wrap select { padding-right: 30px; }
-.input-wrap input:focus, .input-wrap select:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(31,109,63,0.12); }
-.input-wrap.has-error input, .input-wrap.has-error select { border-color: #d9455f; }
-#contactForm .input-wrap input,
-#contactForm .input-wrap textarea { border-color: #b6bec8; }
-#contactForm .input-wrap textarea {
-  width: 100%;
-  padding: 13px 14px 13px 40px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: var(--font-body);
-  color: var(--text-dark);
-  background: #fff;
-  resize: vertical;
-  min-height: 110px;
-}
-#contactForm .input-wrap textarea::placeholder { color: #9aa3ad; }
-#contactForm .input-wrap textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(31,109,63,0.12); }
-#contactForm .input-wrap.has-error textarea { border-color: #d9455f; }
+.input-wrap textarea { resize: vertical; min-height: 110px; }
+.input-wrap input:focus, .input-wrap select:focus, .input-wrap textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(31,109,63,0.12); }
+.input-wrap.has-error input, .input-wrap.has-error select, .input-wrap.has-error textarea { border-color: #d9455f; }
 .field-error { font-size: 12px; color: #d9455f; min-height: 16px; margin-top: -2px; }
 .field-hint { font-size: 12px; color: var(--green-dark); margin-top: -2px; }
 
@@ -1208,6 +1225,34 @@ table { max-width: 100%; }
 }
 .alert-modal-btn:hover { background: var(--green); }
 
+/* Volunteer Promo Modal — shown once per session on the homepage */
+.promo-modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(13,31,71,0.6);
+  z-index: 3100; align-items: center; justify-content: center; padding: 20px;
+}
+.promo-modal-overlay.open { display: flex; }
+.promo-modal {
+  position: relative; background: #fff; border-radius: 16px; padding: 40px 32px 32px;
+  max-width: 420px; width: 100%; text-align: center; box-shadow: 0 24px 60px rgba(13,31,71,0.32);
+  animation: alertModalIn .22s ease;
+}
+.promo-modal-dismiss {
+  position: absolute; top: 14px; right: 14px; background: none; border: none;
+  color: var(--text-gray); font-size: 16px; cursor: pointer; width: 32px; height: 32px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  transition: background .2s ease, color .2s ease;
+}
+.promo-modal-dismiss:hover { background: #f1f5f9; color: var(--navy); }
+.promo-modal-icon {
+  width: 64px; height: 64px; border-radius: 50%; background: #e5f3ea; color: var(--green);
+  display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto 18px;
+}
+.promo-modal h3 { font-size: 21px; font-weight: 800; color: var(--navy); margin-bottom: 10px; }
+.promo-modal p { font-size: 14.5px; color: var(--text-gray); line-height: 1.6; margin-bottom: 26px; }
+.promo-modal-actions { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.promo-modal-later { background: none; border: none; color: var(--text-gray); font-size: 13.5px; font-weight: 600; cursor: pointer; text-decoration: underline; padding: 4px; }
+.promo-modal-later:hover { color: var(--navy); }
+
 /* T-Shirt Size Chart link + modal */
 .size-chart-link {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700;
@@ -1302,23 +1347,28 @@ table { max-width: 100%; }
   .founder-card { padding: 24px 22px; }
   .contact-body { padding: 0 0 50px; }
   .contact-form-section { padding: 50px 0; }
+  .volunteer-form-section { padding: 50px 0; }
+  .benefits-section { padding: 0 0 50px; }
   .why-section { flex-direction: column; }
   .race-cats { flex-direction: column; align-items: center; }
   .movement-item { flex: 1 1 100%; border-right: none !important; padding-bottom: 20px; border-bottom: 1px solid var(--border-gray); }
   .movement-item:last-child { border-bottom: none; }
   .footer-inner { flex-direction: column; text-align: center; }
   .footer-nav {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    justify-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
-    gap: 18px 0;
+    gap: 18px 24px;
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
     padding: 0;
   }
-  .footer-nav a { justify-content: center; width: 100%; }
+  /* No fixed flex-basis: nav labels vary in length (HOME vs VOLUNTEER), so a
+     percentage basis wraps unevenly. Letting flexbox size items naturally and
+     wrap keeps every row — including a short last row — centered as a group. */
+  .footer-nav a { justify-content: center; }
   .footer-meta { flex-direction: column; }
   .footer-divider { display: none; }
   .footer-copy { text-align: center; }
@@ -1334,7 +1384,7 @@ table { max-width: 100%; }
   .stepper-label { font-size: 11.5px; }
   .stepper-track { margin: 0 8px; }
   .gender-row .option-box { font-size: 12.5px; padding: 13px 8px; }
-  .footer-nav { grid-template-columns: repeat(2, 1fr); max-width: 280px; }
+  .footer-nav { max-width: 280px; }
 }
 
 @media (max-width: 576px) {
