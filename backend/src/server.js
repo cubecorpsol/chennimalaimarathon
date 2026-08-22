@@ -12,7 +12,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
 
-const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage, Volunteer } = require("./db");
+const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage, Volunteer, RegistrationFormConfig, DEFAULT_REGISTRATION_FORM_CONFIG } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
@@ -204,6 +204,17 @@ app.get("/api/status", async (req, res) => {
     });
   } catch (err) {
     console.error("STATUS_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// Public Registration Form Config — drives register.html's step/field layout and messages.
+app.get("/api/registration-form-config", async (req, res) => {
+  try {
+    const config = await RegistrationFormConfig.findOne().lean() || DEFAULT_REGISTRATION_FORM_CONFIG;
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error("REGISTRATION_FORM_CONFIG_ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });

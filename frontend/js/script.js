@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 /* =========================================================
    LIVE REMAINING SLOTS BADGE — the small in-form pill on the
-   register page (#remainingSlotsBadge inside step-personal, or
+   register page (#remainingSlotsBadge inside the first built step, or
    any .remaining-slots-box). Mirrors the admin "show remaining
    slots" toggle exposed via /api/status. Irrelevant while
    registrations are closed because its parent step is swapped
@@ -334,19 +334,19 @@ document.addEventListener('DOMContentLoaded', function () {
     var closedStep = document.getElementById('step-closed');
     var successStep = document.getElementById('step-success');
     if (closedStep && !(successStep && successStep.classList.contains('active'))) {
-      formSteps.forEach(function (step) { step.classList.remove('active'); });
+      document.querySelectorAll('.form-step').forEach(function (step) { step.classList.remove('active'); });
       closedStep.classList.add('active');
     }
     lockRegistrationButtons();
   }
 
-  // Restores the regular step-1 flow — used when /api/status reports
+  // Restores the regular first-step flow — used when /api/status reports
   // registrations are open (default state on every fresh page load).
   function showRegistrationsOpenFlow() {
     var closedStep = document.getElementById('step-closed');
     if (closedStep && closedStep.classList.contains('active')) {
       closedStep.classList.remove('active');
-      var personalStep = document.getElementById('step-personal');
+      var personalStep = firstStepId ? document.getElementById(firstStepId) : null;
       if (personalStep) personalStep.classList.add('active');
     }
     if (registerBtn) {
@@ -383,14 +383,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  checkStatus();
-
   /* ---------------------------------------------------------
      Element references
   --------------------------------------------------------- */
-  var formSteps = document.querySelectorAll('.form-step');
-
-  // Step 1 — Personal Details
   var fullNameInput    = document.getElementById('fullName');
   var dobInput         = document.getElementById('dob');
   var phoneInput       = document.getElementById('phone');
@@ -399,18 +394,335 @@ document.addEventListener('DOMContentLoaded', function () {
   var pincodeInput     = document.getElementById('pincode');
   var tshirtSelect     = document.getElementById('tshirt');
   var bloodGroupSelect = document.getElementById('bloodGroup');
-  var continueBtn      = document.getElementById('continueBtn');
+  var continueBtn      = null; // assigned once the config-driven steps are built, below
 
-  // Step 2 — Additional Details
-  var backToPersonal        = document.getElementById('backToPersonal');
   var categoryNameEl        = document.getElementById('categoryName');
   var categoryAgeEl         = document.getElementById('categoryAge');
   var genderBoxes           = document.querySelectorAll('.gender-row .option-box');
   var emergencyContactInput = document.getElementById('emergencyContact');
   var fitnessCheckbox       = document.getElementById('fitnessConfirm');
-  var registerBtn           = document.getElementById('registerBtn');
+  var registerBtn           = null; // assigned once the config-driven steps are built, below
 
   var selectedGender = null;
+
+  /* ---------------------------------------------------------
+     Registration Form Builder — dynamic steps/fields, driven by
+     /api/registration-form-config (superadmin-editable in the admin
+     panel). Falls back to today's default 2-step layout if that
+     request fails, so the page keeps working even if the API is down.
+  --------------------------------------------------------- */
+  var fieldPool             = document.getElementById('fieldPool');
+  var closingBlockPool      = document.getElementById('closingBlockPool');
+  var infoBoxPool           = document.getElementById('infoBoxPool');
+  var dynamicStepsContainer = document.getElementById('dynamicStepsContainer');
+
+  var PAIRABLE_FIELD_KEYS = ['fullName', 'dob', 'phone', 'email', 'district', 'pincode', 'tshirtSize', 'bloodGroup'];
+  var DOM_ID_FOR_KEY = { tshirtSize: 'tshirt' };
+  var currentFormConfig = null;
+  var firstStepId = null;
+
+  function domIdForKey(key) {
+    return DOM_ID_FOR_KEY[key] || key;
+  }
+
+  function getFieldConfig(key) {
+    if (!currentFormConfig) return { enabled: true, required: true };
+    for (var i = 0; i < currentFormConfig.steps.length; i++) {
+      var fields = currentFormConfig.steps[i].fields || [];
+      for (var j = 0; j < fields.length; j++) {
+        if (fields[j].key === key) return fields[j];
+      }
+    }
+    return { enabled: false, required: false };
+  }
+
+  function isFieldEnabled(key) {
+    var cfg = getFieldConfig(key);
+    return !!(cfg && cfg.enabled);
+  }
+
+  function defaultRegistrationFormConfig() {
+    return {
+      steps: [
+        {
+          id: 'step-1', title: 'Personal Details',
+          subtitle: 'Please provide your basic information to continue.', order: 0,
+          fields: [
+            { key: 'fullName', enabled: true, required: true }, { key: 'dob', enabled: true, required: true },
+            { key: 'phone', enabled: true, required: true }, { key: 'email', enabled: true, required: true },
+            { key: 'district', enabled: true, required: true }, { key: 'pincode', enabled: true, required: true },
+            { key: 'tshirtSize', enabled: true, required: true }, { key: 'bloodGroup', enabled: true, required: true }
+          ]
+        },
+        {
+          id: 'step-2', title: 'Additional Details',
+          subtitle: 'Almost there! Just a few more details to complete your registration.', order: 1,
+          fields: [
+            { key: 'gender', enabled: true, required: true }, { key: 'emergencyContact', enabled: true, required: true },
+            { key: 'fitnessConfirm', enabled: true, required: true }
+          ]
+        }
+      ],
+      messages: {}
+    };
+  }
+
+  async function loadRegistrationFormConfig() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/registration-form-config");
+      var data = await res.json();
+      if (data && data.success && data.config && Array.isArray(data.config.steps) && data.config.steps.length) {
+        return data.config;
+      }
+    } catch (err) {
+      console.warn("Registration form config load error:", err);
+    }
+    return defaultRegistrationFormConfig();
+  }
+
+  function applyRegistrationMessages(config) {
+    var messages = (config && config.messages) || {};
+    var closedTitleEl = document.getElementById('closedPanelTitle');
+    var closedTextEl = document.getElementById('closedPanelText');
+    var successTitleEl = document.getElementById('successPanelTitle');
+    var successTextEl = document.getElementById('successPanelText');
+    if (closedTitleEl && messages.closedTitle) closedTitleEl.textContent = messages.closedTitle;
+    if (closedTextEl && messages.closedText) closedTextEl.textContent = messages.closedText;
+    if (successTitleEl && messages.successTitle) successTitleEl.textContent = messages.successTitle;
+    if (successTextEl && messages.successText) successTextEl.textContent = messages.successText;
+  }
+
+  // Admin-configured announcement popup (Registration Form Builder > Announcement
+  // Popup) — off unless the admin enables it, and shown at most once per browser
+  // session, mirroring the homepage's volunteer promo popup.
+  function initRegistrationPopup(config) {
+    var overlay = document.getElementById('registrationPopupOverlay');
+    if (!overlay) return;
+
+    var messages = (config && config.messages) || {};
+    if (!messages.popupEnabled || !(messages.popupTitle || messages.popupText)) return;
+
+    var titleEl = document.getElementById('registrationPopupTitle');
+    var textEl = document.getElementById('registrationPopupText');
+    if (titleEl) titleEl.textContent = messages.popupTitle || '';
+    if (textEl) textEl.textContent = messages.popupText || '';
+
+    var STORAGE_KEY = 'registrationPopupShown';
+    var alreadyShown = false;
+    try { alreadyShown = !!sessionStorage.getItem(STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
+    if (alreadyShown) return;
+
+    function markShown() {
+      try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
+    }
+
+    function closePopup() {
+      overlay.classList.remove('open');
+      markShown();
+    }
+
+    var dismissBtn = document.getElementById('registrationPopupDismiss');
+    var closeBtn = document.getElementById('registrationPopupClose');
+    if (dismissBtn) dismissBtn.addEventListener('click', closePopup);
+    if (closeBtn) closeBtn.addEventListener('click', closePopup);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closePopup();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) closePopup();
+    });
+
+    setTimeout(function () { overlay.classList.add('open'); }, 1200);
+  }
+
+  // Applies a field's required-star visibility + label/placeholder overrides directly
+  // onto its pooled DOM node, once, right before that node gets moved into a step.
+  function applyFieldOverrides(wrapperEl, fieldCfg) {
+    var starEl = wrapperEl.querySelector('[data-role="required-star"]');
+    if (starEl) starEl.style.display = fieldCfg.required ? '' : 'none';
+    if (fieldCfg.label) {
+      var labelEl = wrapperEl.querySelector('[data-role="label"]');
+      if (labelEl) {
+        var starHtml = starEl ? starEl.outerHTML : '';
+        labelEl.innerHTML = fieldCfg.label + ' ' + starHtml;
+      }
+    }
+    if (fieldCfg.placeholder) {
+      var inputEl = wrapperEl.querySelector('[data-role="input"]');
+      if (inputEl && 'placeholder' in inputEl) inputEl.placeholder = fieldCfg.placeholder;
+    }
+  }
+
+  // Builds the whole step DOM from config, re-parenting the pooled field nodes (never
+  // cloning them) so their ids/values/already-bound listeners keep working unchanged
+  // regardless of which step they end up on.
+  function buildRegistrationSteps(config) {
+    currentFormConfig = config;
+    applyRegistrationMessages(config);
+    if (!dynamicStepsContainer || !fieldPool) return;
+
+    dynamicStepsContainer.innerHTML = '';
+    var steps = config.steps.slice().sort(function (a, b) { return a.order - b.order; });
+    var total = steps.length;
+
+    steps.forEach(function (step, idx) {
+      var isFirst = idx === 0;
+      var isLast = idx === total - 1;
+      var stepEl = document.createElement('div');
+      stepEl.className = 'form-step' + (isFirst ? ' active' : '');
+      stepEl.id = step.id;
+      if (isFirst) firstStepId = step.id;
+
+      var badge = document.createElement('div');
+      badge.className = 'step-badge';
+      badge.textContent = 'STEP ' + (idx + 1) + ' OF ' + total;
+      stepEl.appendChild(badge);
+
+      if (isFirst) {
+        var slotsBadge = document.createElement('div');
+        slotsBadge.className = 'reg-slots-badge';
+        slotsBadge.id = 'remainingSlotsBadge';
+        slotsBadge.style.display = 'none';
+        slotsBadge.innerHTML = '<i class="fa-solid fa-bolt"></i> <span id="remainingSlotsVal">0</span>&nbsp;Registration Slots Remaining';
+        stepEl.appendChild(slotsBadge);
+      }
+
+      var stepper = document.createElement('div');
+      stepper.className = 'register-stepper';
+      steps.forEach(function (s, sIdx) {
+        if (sIdx > 0) {
+          var track = document.createElement('div');
+          track.className = 'stepper-track';
+          var fill = document.createElement('div');
+          fill.className = 'stepper-track-fill' + (sIdx <= idx ? ' full' : '');
+          track.appendChild(fill);
+          stepper.appendChild(track);
+        }
+        var item = document.createElement('div');
+        item.className = 'stepper-item' + (sIdx === idx ? ' active' : (sIdx < idx ? ' completed' : ''));
+        if (sIdx < idx) {
+          var check = document.createElement('span');
+          check.className = 'stepper-check';
+          check.innerHTML = '<i class="fa-solid fa-check"></i>';
+          item.appendChild(check);
+        }
+        var stepLabel = document.createElement('span');
+        stepLabel.className = 'stepper-label';
+        stepLabel.textContent = s.title;
+        item.appendChild(stepLabel);
+        stepper.appendChild(item);
+      });
+      stepEl.appendChild(stepper);
+
+      if (!isFirst) {
+        var back = document.createElement('span');
+        back.className = 'back-link';
+        back.innerHTML = '<i class="fa-solid fa-arrow-left"></i> Back to details';
+        (function (targetId) {
+          back.addEventListener('click', function () { goToStep(targetId); });
+        })(steps[idx - 1].id);
+        stepEl.appendChild(back);
+      }
+
+      var title = document.createElement('h2');
+      title.className = 'form-title';
+      title.textContent = (step.title || '').toUpperCase();
+      stepEl.appendChild(title);
+
+      var underline = document.createElement('div');
+      underline.className = 'form-title-underline';
+      stepEl.appendChild(underline);
+
+      if (step.subtitle) {
+        var subtitle = document.createElement('p');
+        subtitle.className = 'form-subtitle';
+        subtitle.textContent = step.subtitle;
+        stepEl.appendChild(subtitle);
+      }
+
+      // Pair consecutive "standard" input/select fields 2-per-row (matching today's
+      // layout); gender/fitnessConfirm always render full-width and solo.
+      var pending = null;
+      function flushPending() {
+        if (!pending) return;
+        var row = document.createElement('div');
+        row.className = 'form-row';
+        pending.style.gridColumn = '1 / -1';
+        row.appendChild(pending);
+        stepEl.appendChild(row);
+        pending = null;
+      }
+
+      (step.fields || []).forEach(function (fieldCfg) {
+        var wrapper = fieldPool.querySelector('[data-field-key="' + fieldCfg.key + '"]');
+        if (!wrapper || !fieldCfg.enabled) return;
+        applyFieldOverrides(wrapper, fieldCfg);
+
+        if (PAIRABLE_FIELD_KEYS.indexOf(fieldCfg.key) !== -1) {
+          if (!pending) {
+            pending = wrapper;
+          } else {
+            var row = document.createElement('div');
+            row.className = 'form-row';
+            row.appendChild(pending);
+            row.appendChild(wrapper);
+            stepEl.appendChild(row);
+            pending = null;
+          }
+        } else {
+          flushPending();
+          stepEl.appendChild(wrapper);
+        }
+      });
+      flushPending();
+
+      if (isLast && closingBlockPool) {
+        while (closingBlockPool.firstChild) stepEl.appendChild(closingBlockPool.firstChild);
+      }
+
+      var actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'btn-continue';
+      actionBtn.innerHTML = isLast
+        ? 'REGISTER NOW <i class="fa-solid fa-arrow-right"></i>'
+        : 'CONTINUE <i class="fa-solid fa-arrow-right"></i>';
+      (function (thisStep, nextStepId, isLastStep) {
+        actionBtn.addEventListener('click', function () {
+          if (!validateFieldsForStep(thisStep)) return;
+          updateCategory();
+          updateRegistrationSummary();
+          if (isLastStep) {
+            handleFormSubmission();
+          } else {
+            goToStep(nextStepId);
+          }
+        });
+      })(step, isLast ? null : steps[idx + 1].id, isLast);
+      stepEl.appendChild(actionBtn);
+
+      if (isFirst) {
+        continueBtn = actionBtn;
+        if (infoBoxPool) {
+          while (infoBoxPool.firstChild) stepEl.appendChild(infoBoxPool.firstChild);
+        }
+      }
+      if (isLast) {
+        registerBtn = actionBtn;
+      }
+
+      dynamicStepsContainer.appendChild(stepEl);
+    });
+
+    updateCategory();
+    updateTshirtHint();
+    updateRegistrationSummary();
+  }
+
+  loadRegistrationFormConfig().then(function (config) {
+    buildRegistrationSteps(config);
+    initRegistrationPopup(config);
+    checkStatus();
+  });
 
   // Event date used as reference point for age / category calculation
   var EVENT_DATE = new Date(2026, 7, 31); // 31 Aug 2026
@@ -672,17 +984,50 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
-  function validateStep1() {
-    var results = [
-      validateFullName(),
-      validateDOB(),
-      validatePhone(),
-      validateEmail(),
-      validateDistrict(),
-      validatePincode(),
-      validateTshirt(),
-      validateBloodGroup()
-    ];
+  var FIELD_VALIDATORS = {
+    fullName: validateFullName, dob: validateDOB, phone: validatePhone, email: validateEmail,
+    district: validateDistrict, pincode: validatePincode, tshirtSize: validateTshirt,
+    bloodGroup: validateBloodGroup
+    // gender / emergencyContact / fitnessConfirm added below, once defined.
+  };
+
+  var FIELD_RAW_VALUE_GETTERS = {
+    fullName: function () { return fullNameInput.value.trim(); },
+    dob: function () { return dobInput.value.trim(); },
+    phone: function () { return phoneInput.value.trim(); },
+    email: function () { return emailInput.value.trim(); },
+    district: function () { return districtSelect.value; },
+    pincode: function () { return pincodeInput.value.trim(); },
+    tshirtSize: function () { return tshirtSelect.value; },
+    bloodGroup: function () { return bloodGroupSelect.value; }
+  };
+
+  // Validates one config-driven step: skips disabled fields entirely, and for
+  // enabled-but-optional fields only runs the field's format checks when it's
+  // non-empty (an empty optional field is valid). Applies a per-field custom
+  // error message override on failure, when the admin has set one.
+  function validateFieldsForStep(step) {
+    var results = (step.fields || []).map(function (fieldCfg) {
+      if (!fieldCfg.enabled) return true;
+      var validatorFn = FIELD_VALIDATORS[fieldCfg.key];
+      if (!validatorFn) return true;
+
+      if (!fieldCfg.required) {
+        var getter = FIELD_RAW_VALUE_GETTERS[fieldCfg.key];
+        var raw = getter ? getter() : null;
+        var isEmpty = fieldCfg.key === 'fitnessConfirm' ? !raw : (raw === '' || raw === null || raw === undefined);
+        if (isEmpty) {
+          clearError(domIdForKey(fieldCfg.key));
+          return true;
+        }
+      }
+
+      var ok = validatorFn();
+      if (!ok && fieldCfg.errorMessage) {
+        showError(domIdForKey(fieldCfg.key), fieldCfg.errorMessage);
+      }
+      return ok;
+    });
     return results.indexOf(false) === -1;
   }
 
@@ -725,14 +1070,13 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
-  function validateStep2() {
-    var results = [
-      validateGender(),
-      validateEmergencyContact(),
-      validateFitness()
-    ];
-    return results.indexOf(false) === -1;
-  }
+  // Extend the field-key lookup maps (declared earlier) now that these 3 validators exist.
+  FIELD_VALIDATORS.gender = validateGender;
+  FIELD_VALIDATORS.emergencyContact = validateEmergencyContact;
+  FIELD_VALIDATORS.fitnessConfirm = validateFitness;
+  FIELD_RAW_VALUE_GETTERS.gender = function () { return selectedGender; };
+  FIELD_RAW_VALUE_GETTERS.emergencyContact = function () { return emergencyContactInput.value.trim(); };
+  FIELD_RAW_VALUE_GETTERS.fitnessConfirm = function () { return fitnessCheckbox.checked; };
 
   /* ---------------------------------------------------------
      Input filters (digits-only fields)
@@ -828,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', function () {
      Step navigation
   --------------------------------------------------------- */
   function goToStep(stepId) {
-    formSteps.forEach(function (step) { step.classList.remove('active'); });
+    document.querySelectorAll('.form-step').forEach(function (step) { step.classList.remove('active'); });
     var target = document.getElementById(stepId);
     if (target) target.classList.add('active');
 
@@ -858,21 +1202,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
 
-  if (continueBtn) {
-    continueBtn.addEventListener('click', function () {
-      if (validateStep1()) {
-        updateCategory();
-        updateRegistrationSummary();
-        goToStep('step-additional');
-      }
-    });
-  }
-
-  if (backToPersonal) {
-    backToPersonal.addEventListener('click', function () {
-      goToStep('step-personal');
-    });
-  }
+  // Continue/Back/Register button wiring now happens per-step inside
+  // buildRegistrationSteps(), since steps (and which button is "last") are
+  // config-driven rather than fixed to a hardcoded 2-step layout.
 
   /* ---------------------------------------------------------
      BACKEND SUBMISSION & REGISTRATION
@@ -887,19 +1219,23 @@ document.addEventListener('DOMContentLoaded', function () {
     var userAge = dobForAge ? calculateAge(dobForAge, EVENT_DATE) : 20;
     var isKidsUser = userAge <= getAgeCutoff();
 
-    var payload = {
-      fullName: fullNameInput.value.trim(),
-      dob: cleanDob,
-      phone: phoneInput.value.trim(),
-      email: emailInput.value.trim(),
-      district: districtSelect.value,
-      pincode: pincodeInput.value.trim(),
-      tshirtSize: isKidsUser ? "N/A" : (tshirtSelect.value || "M"),
-      tshirtSelected: !isKidsUser && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A",
-      bloodGroup: bloodGroupSelect.value,
-      gender: selectedGender,
-      emergencyContact: emergencyContactInput.value.trim()
-    };
+    // Only enabled fields are collected — a field the admin disabled via the
+    // Registration Form Builder is simply omitted; the backend already falls
+    // back to a sensible default for any field that's missing from the payload.
+    var payload = {};
+    if (isFieldEnabled('fullName')) payload.fullName = fullNameInput.value.trim();
+    if (isFieldEnabled('dob')) payload.dob = cleanDob;
+    if (isFieldEnabled('phone')) payload.phone = phoneInput.value.trim();
+    if (isFieldEnabled('email')) payload.email = emailInput.value.trim();
+    if (isFieldEnabled('district')) payload.district = districtSelect.value;
+    if (isFieldEnabled('pincode')) payload.pincode = pincodeInput.value.trim();
+    if (isFieldEnabled('tshirtSize')) {
+      payload.tshirtSize = isKidsUser ? "N/A" : (tshirtSelect.value || "M");
+      payload.tshirtSelected = !isKidsUser && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A";
+    }
+    if (isFieldEnabled('bloodGroup')) payload.bloodGroup = bloodGroupSelect.value;
+    if (isFieldEnabled('gender')) payload.gender = selectedGender;
+    if (isFieldEnabled('emergencyContact')) payload.emergencyContact = emergencyContactInput.value.trim();
 
     try {
       // Retry briefly on cold-start / DB connect failures so users aren't stuck
@@ -1083,14 +1419,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (registerBtn) {
-    registerBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      if (validateStep2()) {
-        handleFormSubmission();
-      }
-    });
-  }
+  // registerBtn's click handling is wired inline in buildRegistrationSteps()
+  // (its click handler calls handleFormSubmission() directly for the last step).
 
 });
 

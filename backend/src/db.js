@@ -134,6 +134,77 @@ const SponsorshipSchema = new mongoose.Schema({
 
 const Sponsorship = mongoose.models.Sponsorship || mongoose.model("Sponsorship", SponsorshipSchema);
 
+// Superadmin-configurable register.html field/step layout + system messages.
+// Singleton, like Settings — one document holds the whole active configuration.
+const RegistrationFormFieldSchema = new mongoose.Schema({
+  key: { type: String, required: true },
+  enabled: { type: Boolean, default: true },
+  required: { type: Boolean, default: true },
+  label: { type: String, default: "" },
+  placeholder: { type: String, default: "" },
+  errorMessage: { type: String, default: "" }
+}, { _id: false });
+
+const RegistrationFormStepSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  title: { type: String, required: true },
+  subtitle: { type: String, default: "" },
+  order: { type: Number, required: true },
+  fields: [RegistrationFormFieldSchema]
+}, { _id: false });
+
+const RegistrationFormConfigSchema = new mongoose.Schema({
+  steps: [RegistrationFormStepSchema],
+  messages: {
+    closedTitle: { type: String, default: "Registrations Closed" },
+    closedText: { type: String, default: "All slots for the Chennimalai Marathon 2026 have been filled, or registrations are currently closed. Thank you to everyone who joined us!" },
+    successTitle: { type: String, default: "You're registered!" },
+    successText: { type: String, default: "Thank you for registering for the Chennimalai Marathon. A confirmation will be sent to your email — please check your Spam folder too." },
+    // Announcement popup shown once per browser session on register.html — off by
+    // default, admin opts in with their own title/message.
+    popupEnabled: { type: Boolean, default: false },
+    popupTitle: { type: String, default: "" },
+    popupText: { type: String, default: "" }
+  }
+}, { timestamps: true });
+
+const RegistrationFormConfig = mongoose.models.RegistrationFormConfig || mongoose.model("RegistrationFormConfig", RegistrationFormConfigSchema);
+
+// Reproduces today's hardcoded register.html layout exactly, so seeding this
+// changes nothing visually until a superadmin edits it via the admin panel.
+const DEFAULT_REGISTRATION_FORM_CONFIG = {
+  steps: [
+    {
+      id: "step-1",
+      title: "Personal Details",
+      subtitle: "Please provide your basic information to continue.",
+      order: 0,
+      fields: [
+        { key: "fullName", enabled: true, required: true },
+        { key: "dob", enabled: true, required: true },
+        { key: "phone", enabled: true, required: true },
+        { key: "email", enabled: true, required: true },
+        { key: "district", enabled: true, required: true },
+        { key: "pincode", enabled: true, required: true },
+        { key: "tshirtSize", enabled: true, required: true },
+        { key: "bloodGroup", enabled: true, required: true }
+      ]
+    },
+    {
+      id: "step-2",
+      title: "Additional Details",
+      subtitle: "Almost there! Just a few more details to complete your registration.",
+      order: 1,
+      fields: [
+        { key: "gender", enabled: true, required: true },
+        { key: "emergencyContact", enabled: true, required: true },
+        { key: "fitnessConfirm", enabled: true, required: true }
+      ]
+    }
+  ],
+  messages: {}
+};
+
 // Cached connection — required on Vercel serverless so cold starts don't
 // hit Mongoose buffering timeouts (settings.findOne() timed out after 10000ms).
 let isConnected = false;
@@ -245,6 +316,13 @@ async function seedInitialData() {
     if (backfilled.modifiedCount > 0) {
       console.log(`🌱 [DB SEED] Backfilled tempBibNumber from tshirtNumber for ${backfilled.modifiedCount} registrations.`);
     }
+
+    // 4. Seed the default registration form config if none exists
+    const formConfigCount = await RegistrationFormConfig.countDocuments();
+    if (formConfigCount === 0) {
+      await RegistrationFormConfig.create(DEFAULT_REGISTRATION_FORM_CONFIG);
+      console.log("🌱 [DB SEED] Default Registration Form Config initialized.");
+    }
   } catch (err) {
     console.error("❌ DB_SEED_ERROR:", err.message);
   }
@@ -257,6 +335,8 @@ module.exports = {
   AdminUser,
   Sponsorship,
   ContactMessage,
-  Volunteer
+  Volunteer,
+  RegistrationFormConfig,
+  DEFAULT_REGISTRATION_FORM_CONFIG
 };
 

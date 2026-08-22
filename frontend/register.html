@@ -98,13 +98,13 @@
  
     <div class="register-form-panel">
       <div class="register-card">
- 
+
         <!-- REGISTRATIONS CLOSED PANEL -->
         <div class="form-step" id="step-closed">
           <div class="reg-closed-panel">
             <i class="fa-solid fa-triangle-exclamation"></i>
-            <h2>Registrations Closed</h2>
-            <p>All slots for the Chennimalai Marathon 2026 have been filled, or registrations are currently closed. Thank you to everyone who joined us!</p>
+            <h2 id="closedPanelTitle">Registrations Closed</h2>
+            <p id="closedPanelText">All slots for the Chennimalai Marathon 2026 have been filled, or registrations are currently closed. Thank you to everyone who joined us!</p>
             <p>We will still consider applications submitted after this point — however, a T-shirt is not guaranteed for further applications.</p>
             <div class="reg-closed-contact">
               <div class="contact-title">For Further Registration, Kindly Reach Out To Us</div>
@@ -113,173 +113,167 @@
           </div>
         </div>
 
-        <!-- STEP 1 — PERSONAL DETAILS -->
-        <div class="form-step active" id="step-personal">
+        <!-- Superadmin-configurable steps are built here at runtime from
+             /api/registration-form-config — see js/script.js buildRegistrationSteps(). -->
+        <div id="dynamicStepsContainer"></div>
 
-          <div class="step-badge">STEP 1 OF 2</div>
-
-          <div class="reg-slots-badge" id="remainingSlotsBadge" style="display:none;">
-            <i class="fa-solid fa-bolt"></i> <span id="remainingSlotsVal">0</span>&nbsp;Registration Slots Remaining
+        <!-- STEP 3 — SUCCESS -->
+        <div class="form-step" id="step-success">
+          <div class="reg-success">
+            <i class="fa-solid fa-circle-check"></i>
+            <h3 id="successPanelTitle">You're registered!</h3>
+            <p id="successPanelText">Thank you for registering for the Chennimalai Marathon. A confirmation will be sent to your email — please check your Spam folder too.</p>
           </div>
-
-          <div class="register-stepper">
-            <div class="stepper-item active" id="stepper-item-personal">
-              <span class="stepper-label">Personal Details</span>
-            </div>
-            <div class="stepper-track">
-              <div class="stepper-track-fill" id="stepper-fill"></div>
-            </div>
-            <div class="stepper-item" id="stepper-item-additional">
-              <span class="stepper-label">Additional Details</span>
-            </div>
-          </div>
- 
-          <h2 class="form-title">PERSONAL DETAILS</h2>
-          <div class="form-title-underline"></div>
-          <p class="form-subtitle">Please provide your basic information to continue.</p>
- 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="fullName">Full Name <span class="required-star">*</span></label>
-              <div class="input-wrap" id="fullName-wrap">
-                <i class="fa-solid fa-user"></i>
-                <input type="text" id="fullName" placeholder="Enter your full name">
-              </div>
-              <div class="field-error" id="fullName-error"></div>
-            </div>
-            <div class="form-group">
-              <label for="dob">Date of Birth <span class="required-star">*</span></label>
-              <div class="input-wrap" id="dob-wrap">
-                <i class="fa-regular fa-calendar"></i>
-                <input type="text" id="dob" placeholder="DD / MM / YYYY" autocomplete="off">
-              </div>
-              <div class="field-hint">Your age will be calculated automatically</div>
-              <div class="field-error" id="dob-error"></div>
-            </div>
-          </div>
- 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="phone">Phone Number <span class="required-star">*</span></label>
-              <div class="input-wrap" id="phone-wrap">
-                <i class="fa-solid fa-phone"></i>
-                <input type="tel" id="phone" placeholder="Enter 10 digit mobile number" maxlength="10">
-              </div>
-              <div class="field-error" id="phone-error"></div>
-            </div>
-            <div class="form-group">
-              <label for="email">Email Address <span class="required-star">*</span></label>
-              <div class="input-wrap" id="email-wrap">
-                <i class="fa-regular fa-envelope"></i>
-                <input type="email" id="email" placeholder="Enter your email address">
-              </div>
-              <div class="field-error" id="email-error"></div>
-            </div>
-          </div>
- 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="district">District <span class="required-star">*</span></label>
-              <div class="input-wrap" id="district-wrap">
-                <i class="fa-solid fa-location-dot"></i>
-                <select id="district">
-                  <option value="">Select your district</option>
-                </select>
-              </div>
-              <div class="field-error" id="district-error"></div>
-            </div>
-            <div class="form-group">
-              <label for="pincode">Pincode <span class="required-star">*</span></label>
-              <div class="input-wrap" id="pincode-wrap">
-                <i class="fa-regular fa-id-card"></i>
-                <input type="text" id="pincode" placeholder="Enter 6 digit pincode" maxlength="6">
-              </div>
-              <div class="field-error" id="pincode-error"></div>
-            </div>
-          </div>
- 
-          <div class="form-row" id="tshirtBloodRow">
-            <div class="form-group" id="tshirtFormGroup">
-              <label for="tshirt">T-Shirt Size <span class="required-star">*</span></label>
-              <div class="input-wrap" id="tshirt-wrap">
-                <i class="fa-solid fa-shirt"></i>
-                <select id="tshirt">
-                  <option value="">Select T-Shirt Size</option>
-                  <option value="XS">XS</option>
-                  <option value="S">S</option>
-                  <option value="M">M</option>
-                  <option value="L">L</option>
-                  <option value="XL">XL</option>
-                  <option value="XXL">XXL</option>
-                  <option value="XXXL">XXXL</option>
-                </select>
-              </div>
-              <a href="#" class="size-chart-link" id="sizeChartLink" data-bs-toggle="modal" data-bs-target="#sizeChartModal">
-                <i class="fa-solid fa-ruler"></i> View Size Chart
-              </a>
-              <div class="field-hint" id="tshirt-hint">Complimentary for runners aged above 13 (7 KM category).</div>
-              <div class="field-error" id="tshirt-error"></div>
-            </div>
-            <div class="form-group">
-              <label for="bloodGroup">Blood Group <span class="required-star">*</span></label>
-              <div class="input-wrap" id="bloodGroup-wrap">
-                <i class="fa-solid fa-droplet"></i>
-                <select id="bloodGroup">
-                  <option value="">Select Blood Group</option>
-                  <option value="A+">A+</option>
-                  <option value="A-">A-</option>
-                  <option value="B+">B+</option>
-                  <option value="B-">B-</option>
-                  <option value="AB+">AB+</option>
-                  <option value="AB-">AB-</option>
-                  <option value="O+">O+</option>
-                  <option value="O-">O-</option>
-                </select>
-              </div>
-              <div class="field-error" id="bloodGroup-error"></div>
-            </div>
-          </div>
- 
-          <button type="button" class="btn-continue" id="continueBtn">CONTINUE <i class="fa-solid fa-arrow-right"></i></button>
- 
-          <div class="info-box">
-            <span class="info-box-icon"><i class="fa-solid fa-info"></i></span>
-            <div class="info-box-content">
-              <div class="info-box-title">Why do we need this information?</div>
-              <ul class="info-box-list">
-                <li>Your date of birth helps us determine your eligible category.</li>
-                <li>Phone number &amp; email will be used for event updates and important notifications.</li>
-                <li>All data is secure and will not be shared with third parties.</li>
-              </ul>
-            </div>
-          </div>
- 
         </div>
- 
-        <!-- STEP 2 — ADDITIONAL DETAILS -->
-        <div class="form-step" id="step-additional">
- 
-          <div class="step-badge">STEP 2 OF 2</div>
- 
-          <div class="register-stepper">
-            <div class="stepper-item completed" id="stepper-item-personal-2">
-              <span class="stepper-check"><i class="fa-solid fa-check"></i></span>
-              <span class="stepper-label">Personal Details</span>
+
+        <!-- ===================== FIELD POOL (hidden) =====================
+             Every field register.html can collect, in its default markup.
+             js/script.js moves these nodes into the runtime-built steps
+             above per the admin-configured layout; ids/classes are
+             untouched so existing validation/business logic keeps working
+             regardless of which step a field ends up in. -->
+        <div id="fieldPool" hidden>
+
+          <div class="form-group" data-field-key="fullName">
+            <label for="fullName" data-role="label">Full Name <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="fullName-wrap">
+              <i class="fa-solid fa-user"></i>
+              <input type="text" id="fullName" data-role="input" placeholder="Enter your full name">
             </div>
-            <div class="stepper-track">
-              <div class="stepper-track-fill full"></div>
-            </div>
-            <div class="stepper-item active" id="stepper-item-additional-2">
-              <span class="stepper-label">Additional Details</span>
-            </div>
+            <div class="field-error" id="fullName-error"></div>
           </div>
- 
-          <span class="back-link" id="backToPersonal"><i class="fa-solid fa-arrow-left"></i> Back to details</span>
- 
-          <h2 class="form-title">ADDITIONAL DETAILS</h2>
-          <div class="form-title-underline"></div>
-          <p class="form-subtitle">Almost there! Just a few more details to complete your registration.</p>
- 
+
+          <div class="form-group" data-field-key="dob">
+            <label for="dob" data-role="label">Date of Birth <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="dob-wrap">
+              <i class="fa-regular fa-calendar"></i>
+              <input type="text" id="dob" data-role="input" placeholder="DD / MM / YYYY" autocomplete="off">
+            </div>
+            <div class="field-hint">Your age will be calculated automatically</div>
+            <div class="field-error" id="dob-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="phone">
+            <label for="phone" data-role="label">Phone Number <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="phone-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="phone" data-role="input" placeholder="Enter 10 digit mobile number" maxlength="10">
+            </div>
+            <div class="field-error" id="phone-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="email">
+            <label for="email" data-role="label">Email Address <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="email-wrap">
+              <i class="fa-regular fa-envelope"></i>
+              <input type="email" id="email" data-role="input" placeholder="Enter your email address">
+            </div>
+            <div class="field-error" id="email-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="district">
+            <label for="district" data-role="label">District <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="district-wrap">
+              <i class="fa-solid fa-location-dot"></i>
+              <select id="district" data-role="input">
+                <option value="">Select your district</option>
+              </select>
+            </div>
+            <div class="field-error" id="district-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="pincode">
+            <label for="pincode" data-role="label">Pincode <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="pincode-wrap">
+              <i class="fa-regular fa-id-card"></i>
+              <input type="text" id="pincode" data-role="input" placeholder="Enter 6 digit pincode" maxlength="6">
+            </div>
+            <div class="field-error" id="pincode-error"></div>
+          </div>
+
+          <div class="form-group" id="tshirtFormGroup" data-field-key="tshirtSize">
+            <label for="tshirt" data-role="label">T-Shirt Size <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="tshirt-wrap">
+              <i class="fa-solid fa-shirt"></i>
+              <select id="tshirt" data-role="input">
+                <option value="">Select T-Shirt Size</option>
+                <option value="XS">XS</option>
+                <option value="S">S</option>
+                <option value="M">M</option>
+                <option value="L">L</option>
+                <option value="XL">XL</option>
+                <option value="XXL">XXL</option>
+                <option value="XXXL">XXXL</option>
+              </select>
+            </div>
+            <a href="#" class="size-chart-link" id="sizeChartLink" data-bs-toggle="modal" data-bs-target="#sizeChartModal">
+              <i class="fa-solid fa-ruler"></i> View Size Chart
+            </a>
+            <div class="field-hint" id="tshirt-hint">Complimentary for runners aged above 13 (7 KM category).</div>
+            <div class="field-error" id="tshirt-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="bloodGroup">
+            <label for="bloodGroup" data-role="label">Blood Group <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="bloodGroup-wrap">
+              <i class="fa-solid fa-droplet"></i>
+              <select id="bloodGroup" data-role="input">
+                <option value="">Select Blood Group</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+              </select>
+            </div>
+            <div class="field-error" id="bloodGroup-error"></div>
+          </div>
+
+          <div data-field-key="gender">
+            <span class="section-label" data-role="label">Gender <span class="required-star" data-role="required-star">*</span></span>
+            <div class="gender-row">
+              <div class="option-box selectable blue-line" data-gender="male" id="genderMale">
+                <i class="fa-solid fa-mars opt-icon"></i>
+                Male
+              </div>
+              <div class="option-box selectable pink-line" data-gender="female" id="genderFemale">
+                <i class="fa-solid fa-venus opt-icon"></i>
+                Female
+              </div>
+              <div class="option-box selectable purple-line" data-gender="others" id="genderOthers">
+                <i class="fa-solid fa-venus-mars opt-icon"></i>
+                Others
+              </div>
+            </div>
+            <div class="field-error" id="gender-error"></div>
+          </div>
+
+          <div class="form-group" data-field-key="emergencyContact">
+            <label for="emergencyContact" data-role="label">Emergency Contact (Mandatory) <span class="required-star" data-role="required-star">*</span></label>
+            <div class="input-wrap" id="emergencyContact-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="emergencyContact" data-role="input" placeholder="Enter 10 digit mobile number" maxlength="10">
+            </div>
+            <div class="field-error" id="emergencyContact-error"></div>
+          </div>
+
+          <div data-field-key="fitnessConfirm">
+            <label class="confirm-checkbox" for="fitnessConfirm">
+              <input type="checkbox" id="fitnessConfirm">
+              <span class="confirm-checkmark"><i class="fa-solid fa-check"></i></span>
+              <span class="confirm-text">I confirm that I am medically fit to participate in the Chennimalai Marathon and agree to the <a href="terms.html" target="_blank" style="color:var(--green); text-decoration:underline;">Terms &amp; Conditions</a>.</span>
+            </label>
+            <div class="field-error" id="fitnessConfirm-error"></div>
+          </div>
+
+        </div>
+
+        <!-- Category display + fee summary — always rendered just before the final
+             submit button, regardless of step composition (not a toggleable field). -->
+        <div id="closingBlockPool" hidden>
           <span class="section-label">YOUR CATEGORY</span>
           <div class="category-box" id="categoryBox">
             <span class="category-icon"><i class="fa-solid fa-person-running"></i></span>
@@ -290,33 +284,7 @@
             <span class="category-check"><i class="fa-solid fa-check"></i></span>
           </div>
           <div class="field-hint">Automatically selected based on your Date of Birth.</div>
- 
-          <span class="section-label">Gender <span class="required-star">*</span></span>
-          <div class="gender-row">
-            <div class="option-box selectable blue-line" data-gender="male" id="genderMale">
-              <i class="fa-solid fa-mars opt-icon"></i>
-              Male
-            </div>
-            <div class="option-box selectable pink-line" data-gender="female" id="genderFemale">
-              <i class="fa-solid fa-venus opt-icon"></i>
-              Female
-            </div>
-            <div class="option-box selectable purple-line" data-gender="others" id="genderOthers">
-              <i class="fa-solid fa-venus-mars opt-icon"></i>
-              Others
-            </div>
-          </div>
-          <div class="field-error" id="gender-error"></div>
- 
-          <div class="form-group">
-            <label for="emergencyContact">Emergency Contact (Mandatory) <span class="required-star">*</span></label>
-            <div class="input-wrap" id="emergencyContact-wrap">
-              <i class="fa-solid fa-phone"></i>
-              <input type="tel" id="emergencyContact" placeholder="Enter 10 digit mobile number" maxlength="10">
-            </div>
-            <div class="field-error" id="emergencyContact-error"></div>
-          </div>
- 
+
           <div class="reg-summary" id="regSummary">
             <div class="reg-summary-title">Registration Summary</div>
             <div class="reg-summary-row">
@@ -337,27 +305,23 @@
               <span id="summaryTotal">₹0</span>
             </div>
           </div>
- 
-          <label class="confirm-checkbox" for="fitnessConfirm">
-            <input type="checkbox" id="fitnessConfirm">
-            <span class="confirm-checkmark"><i class="fa-solid fa-check"></i></span>
-            <span class="confirm-text">I confirm that I am medically fit to participate in the Chennimalai Marathon and agree to the <a href="terms.html" target="_blank" style="color:var(--green); text-decoration:underline;">Terms &amp; Conditions</a>.</span>
-          </label>
-          <div class="field-error" id="fitnessConfirm-error"></div>
- 
-          <button type="button" class="btn-continue" id="registerBtn">REGISTER NOW <i class="fa-solid fa-arrow-right"></i></button>
- 
         </div>
- 
-        <!-- STEP 3 — SUCCESS -->
-        <div class="form-step" id="step-success">
-          <div class="reg-success">
-            <i class="fa-solid fa-circle-check"></i>
-            <h3>You're registered!</h3>
-            <p>Thank you for registering for the Chennimalai Marathon. A confirmation will be sent to your email — please check your Spam folder too.</p>
+
+        <!-- Decorative helper copy — always rendered on the first step. -->
+        <div id="infoBoxPool" hidden>
+          <div class="info-box">
+            <span class="info-box-icon"><i class="fa-solid fa-info"></i></span>
+            <div class="info-box-content">
+              <div class="info-box-title">Why do we need this information?</div>
+              <ul class="info-box-list">
+                <li>Your date of birth helps us determine your eligible category.</li>
+                <li>Phone number &amp; email will be used for event updates and important notifications.</li>
+                <li>All data is secure and will not be shared with third parties.</li>
+              </ul>
+            </div>
           </div>
         </div>
- 
+
       </div>
     </div>
  
@@ -434,7 +398,25 @@
     <button type="button" class="alert-modal-btn" id="alertModalClose">OK</button>
   </div>
 </div>
- 
+
+<!-- ===================== REGISTRATION ANNOUNCEMENT POPUP =====================
+     Content + on/off toggle are fully admin-controlled (Registration Form
+     Builder > Announcement Popup). Hidden by default; script.js only shows
+     it once per browser session, and only when popupEnabled is true. -->
+<div class="promo-modal-overlay" id="registrationPopupOverlay">
+  <div class="promo-modal" role="dialog" aria-modal="true" aria-labelledby="registrationPopupTitle">
+    <button type="button" class="promo-modal-dismiss" id="registrationPopupDismiss" aria-label="Close">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+    <span class="promo-modal-icon"><i class="fa-solid fa-bullhorn"></i></span>
+    <h3 id="registrationPopupTitle"></h3>
+    <p id="registrationPopupText"></p>
+    <div class="promo-modal-actions">
+      <button type="button" class="promo-modal-later" id="registrationPopupClose">GOT IT</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="js/pincode-data.js" defer></script>

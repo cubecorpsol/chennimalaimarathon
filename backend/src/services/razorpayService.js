@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
-const { Settings, Registration } = require("../db");
+const { Settings, Registration, RegistrationFormConfig, DEFAULT_REGISTRATION_FORM_CONFIG } = require("../db");
 const sheets = require("./sheetsService");
 const payuService = require("./payuService");
 const emailService = require("./emailService");
@@ -80,6 +80,36 @@ function shouldBypassLiveCheckout() {
   return isDevelopment() || !hasRazorpayCredentials();
 }
 
+// Maps a form config field key to the key register.html's payload actually sends under.
+// fitnessConfirm is deliberately absent — it's a client-side-only confirmation gate,
+// never transmitted to the backend, so it can't be (and doesn't need to be) checked here.
+const FORM_FIELD_TO_PAYLOAD_KEY = {
+  fullName: "fullName", dob: "dob", phone: "phone", email: "email",
+  district: "district", pincode: "pincode", tshirtSize: "tshirtSize",
+  bloodGroup: "bloodGroup", gender: "gender", emergencyContact: "emergencyContact"
+};
+
+/**
+ * Superadmin-configured required fields (Registration Form Builder) — rejects a
+ * submission missing a field the config marks enabled+required. Skips tshirtSize
+ * for Kids participants, who never see/submit that field (always forced to "N/A").
+ */
+async function validateRequiredFormFields(formData, participantType) {
+  const config = await RegistrationFormConfig.findOne().lean() || DEFAULT_REGISTRATION_FORM_CONFIG;
+  const allFields = (config.steps || []).flatMap((s) => s.fields || []);
+  for (const field of allFields) {
+    if (!field.enabled || !field.required) continue;
+    const payloadKey = FORM_FIELD_TO_PAYLOAD_KEY[field.key];
+    if (!payloadKey) continue;
+    if (field.key === "tshirtSize" && participantType === "Kids") continue;
+    const value = formData[payloadKey];
+    if (value === undefined || value === null || String(value).trim() === "") {
+      return { valid: false, key: field.key, message: field.errorMessage || "Please fill in all required fields." };
+    }
+  }
+  return { valid: true };
+}
+
 function calculateAge(dobStr) {
   if (!dobStr) return 20;
   const parts = dobStr.split(/[\/\-]/).map(Number);
@@ -120,6 +150,11 @@ async function createOrder(req, res) {
     const age = calculateAge(formData.dob);
     const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
     const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
+
+    const fieldCheck = await validateRequiredFormFields(formData, participantType);
+    if (!fieldCheck.valid) {
+      return res.status(400).json({ error: "MISSING_REQUIRED_FIELD", field: fieldCheck.key, message: fieldCheck.message });
+    }
 
     const tshirtSelected = participantType !== "Kids" && formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
     const registrationFee = participantType === "Adult"
