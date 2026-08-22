@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
-const { Settings, Registration, RegistrationFormConfig, DEFAULT_REGISTRATION_FORM_CONFIG } = require("../db");
+const { Settings, Registration, RegistrationFormConfig, DEFAULT_REGISTRATION_FORM_CONFIG, TshirtSettings, DEFAULT_TSHIRT_SETTINGS } = require("../db");
 const sheets = require("./sheetsService");
 const payuService = require("./payuService");
 const emailService = require("./emailService");
@@ -96,18 +96,40 @@ const FORM_FIELD_TO_PAYLOAD_KEY = {
  */
 async function validateRequiredFormFields(formData, participantType) {
   const config = await RegistrationFormConfig.findOne().lean() || DEFAULT_REGISTRATION_FORM_CONFIG;
+  const tshirtEligible = await getTshirtEligibility(participantType);
   const allFields = (config.steps || []).flatMap((s) => s.fields || []);
   for (const field of allFields) {
     if (!field.enabled || !field.required) continue;
     const payloadKey = FORM_FIELD_TO_PAYLOAD_KEY[field.key];
     if (!payloadKey) continue;
-    if (field.key === "tshirtSize" && participantType === "Kids") continue;
+    if (field.key === "tshirtSize" && !tshirtEligible) continue;
     const value = formData[payloadKey];
     if (value === undefined || value === null || String(value).trim() === "") {
       return { valid: false, key: field.key, message: field.errorMessage || "Please fill in all required fields." };
     }
   }
   return { valid: true };
+}
+
+/**
+ * Whether the current participant type may select/be charged for a t-shirt at
+ * all — combines the Registration Form Builder's "tshirtSize field enabled"
+ * flag with the T-Shirt Settings page's per-category (kids/adults) eligibility
+ * toggle. Used to force tshirtSize/tshirtSelected server-side regardless of
+ * what the client submits, so a disabled/ineligible t-shirt never silently
+ * defaults to a real size (e.g. "M") or gets charged.
+ */
+async function getTshirtEligibility(participantType) {
+  const [config, tshirtSettings] = await Promise.all([
+    RegistrationFormConfig.findOne().lean(),
+    TshirtSettings.findOne().lean()
+  ]);
+  const cfg = config || DEFAULT_REGISTRATION_FORM_CONFIG;
+  const settings = tshirtSettings || DEFAULT_TSHIRT_SETTINGS;
+  const tshirtField = (cfg.steps || []).flatMap((s) => s.fields || []).find((f) => f.key === "tshirtSize");
+  const fieldEnabled = !tshirtField || tshirtField.enabled !== false;
+  const categoryEnabled = participantType === "Kids" ? settings.kidsEnabled : settings.adultsEnabled;
+  return fieldEnabled && !!categoryEnabled;
 }
 
 function calculateAge(dobStr) {
@@ -156,7 +178,8 @@ async function createOrder(req, res) {
       return res.status(400).json({ error: "MISSING_REQUIRED_FIELD", field: fieldCheck.key, message: fieldCheck.message });
     }
 
-    const tshirtSelected = participantType !== "Kids" && formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
+    const tshirtEligible = await getTshirtEligibility(participantType);
+    const tshirtSelected = tshirtEligible && formData.tshirtSelected !== false && String(formData.tshirtSelected) !== "false";
     const registrationFee = participantType === "Adult"
       ? Number(settings.adultFee ?? 150)
       : Number(settings.kidsFee ?? 100);
@@ -201,8 +224,8 @@ async function createOrder(req, res) {
         phone: formData.phone || "",
         email: emailLower,
         district: formData.district || "",
-        tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
-        tshirtSelected: participantType !== "Kids" && tshirtSelected,
+        tshirtSize: tshirtEligible ? (formData.tshirtSize || "M") : "N/A",
+        tshirtSelected: tshirtSelected,
         bloodGroup: formData.bloodGroup || "O+",
         emergencyContact: formData.emergencyContact || "",
         registrationFee,
@@ -285,8 +308,8 @@ async function createOrder(req, res) {
       email: emailLower,
       district: formData.district || "",
       pincode: formData.pincode || "",
-      tshirtSize: participantType === "Kids" ? "N/A" : (formData.tshirtSize || "M"),
-      tshirtSelected: participantType !== "Kids" && tshirtSelected,
+      tshirtSize: tshirtEligible ? (formData.tshirtSize || "M") : "N/A",
+      tshirtSelected: tshirtSelected,
       bloodGroup: formData.bloodGroup || "O+",
       emergencyContact: formData.emergencyContact || "",
       registrationFee,
@@ -435,6 +458,7 @@ module.exports = {
   createRazorpayOrder,
   verifySignature,
   maybeSendPaymentRequestEmail,
+  getTshirtEligibility,
   isDevelopment,
   isProduction,
   shouldBypassLiveCheckout

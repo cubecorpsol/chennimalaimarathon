@@ -205,6 +205,41 @@ const DEFAULT_REGISTRATION_FORM_CONFIG = {
   messages: {}
 };
 
+// Superadmin-configurable T-shirt eligibility (per participant type) + the
+// reference size chart shown in register.html's "View Size Chart" popup.
+const TshirtSizeChartRowSchema = new mongoose.Schema({
+  size: { type: String, required: true },
+  chest: { type: String, default: "" },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true }
+}, { _id: false });
+
+const TshirtSettingsSchema = new mongoose.Schema({
+  kidsEnabled: { type: Boolean, default: false },
+  adultsEnabled: { type: Boolean, default: true },
+  sizeChart: [TshirtSizeChartRowSchema],
+  warningText: { type: String, default: "Once registration is confirmed, the selected T-shirt size cannot be changed." }
+}, { timestamps: true });
+
+const TshirtSettings = mongoose.models.TshirtSettings || mongoose.model("TshirtSettings", TshirtSettingsSchema);
+
+// Reproduces today's hardcoded size-chart table exactly, and today's hardcoded
+// eligibility rule (kids never get a t-shirt, adults always do).
+const DEFAULT_TSHIRT_SETTINGS = {
+  kidsEnabled: false,
+  adultsEnabled: true,
+  sizeChart: [
+    { size: "XS", chest: "34", width: 17, height: 24.75 },
+    { size: "S", chest: "36", width: 18, height: 26.25 },
+    { size: "M", chest: "38", width: 19, height: 27.75 },
+    { size: "L", chest: "40", width: 20, height: 28.75 },
+    { size: "XL", chest: "42", width: 21, height: 29.75 },
+    { size: "XXL", chest: "44", width: 22, height: 30.75 },
+    { size: "XXXL", chest: "46", width: 23, height: 31.75 }
+  ],
+  warningText: "Once registration is confirmed, the selected T-shirt size cannot be changed."
+};
+
 // Cached connection — required on Vercel serverless so cold starts don't
 // hit Mongoose buffering timeouts (settings.findOne() timed out after 10000ms).
 let isConnected = false;
@@ -323,6 +358,13 @@ async function seedInitialData() {
       await RegistrationFormConfig.create(DEFAULT_REGISTRATION_FORM_CONFIG);
       console.log("🌱 [DB SEED] Default Registration Form Config initialized.");
     }
+
+    // 5. Seed the default t-shirt settings if none exists
+    const tshirtSettingsCount = await TshirtSettings.countDocuments();
+    if (tshirtSettingsCount === 0) {
+      await TshirtSettings.create(DEFAULT_TSHIRT_SETTINGS);
+      console.log("🌱 [DB SEED] Default T-Shirt Settings initialized.");
+    }
   } catch (err) {
     console.error("❌ DB_SEED_ERROR:", err.message);
   }
@@ -337,6 +379,8 @@ module.exports = {
   ContactMessage,
   Volunteer,
   RegistrationFormConfig,
-  DEFAULT_REGISTRATION_FORM_CONFIG
+  DEFAULT_REGISTRATION_FORM_CONFIG,
+  TshirtSettings,
+  DEFAULT_TSHIRT_SETTINGS
 };
 

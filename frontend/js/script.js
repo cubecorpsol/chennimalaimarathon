@@ -243,11 +243,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!hint) return;
     var cutoff = getAgeCutoff();
     var tshirtPrice = Number(currentSettings.tshirtPrice ?? 0);
-    if (tshirtPrice > 0) {
-      hint.textContent = 'Available only for runners aged above ' + cutoff + ' (7 KM category). Charge: ' + formatRupee(tshirtPrice) + '.';
-    } else {
-      hint.textContent = 'Complimentary for runners aged above ' + cutoff + ' (7 KM category).';
-    }
+    var settings = currentTshirtSettings || defaultTshirtSettings();
+    var eligibilityText = settings.kidsEnabled && settings.adultsEnabled
+      ? 'Available for all participants'
+      : (settings.adultsEnabled ? 'Available only for runners aged above ' + cutoff + ' (7 KM category)' : 'Available only for the 3.5 KM Fun Run category');
+    hint.textContent = tshirtPrice > 0
+      ? eligibilityText + '. Charge: ' + formatRupee(tshirtPrice) + '.'
+      : eligibilityText + '.';
   }
 
   function updateRegistrationSummary() {
@@ -271,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var tshirtSelectEl = document.getElementById('tshirt');
-    var tshirtSelected = !isKids && tshirtSelectEl &&
+    var tshirtSelected = isTshirtEligibleForCurrentUser(isKids) && tshirtSelectEl &&
       tshirtSelectEl.value !== "" &&
       tshirtSelectEl.value !== "NO" &&
       tshirtSelectEl.value !== "N/A";
@@ -439,6 +441,72 @@ document.addEventListener('DOMContentLoaded', function () {
   function isFieldEnabled(key) {
     var cfg = getFieldConfig(key);
     return !!(cfg && cfg.enabled);
+  }
+
+  /* ---------------------------------------------------------
+     T-Shirt Settings — admin-configurable eligibility (per
+     participant type) + the "View Size Chart" popup's data.
+     Driven by /api/tshirt-settings (T-Shirt Settings admin page).
+  --------------------------------------------------------- */
+  var currentTshirtSettings = null;
+
+  function defaultTshirtSettings() {
+    return {
+      kidsEnabled: false,
+      adultsEnabled: true,
+      sizeChart: [
+        { size: 'XS', chest: '34', width: 17, height: 24.75 },
+        { size: 'S', chest: '36', width: 18, height: 26.25 },
+        { size: 'M', chest: '38', width: 19, height: 27.75 },
+        { size: 'L', chest: '40', width: 20, height: 28.75 },
+        { size: 'XL', chest: '42', width: 21, height: 29.75 },
+        { size: 'XXL', chest: '44', width: 22, height: 30.75 },
+        { size: 'XXXL', chest: '46', width: 23, height: 31.75 }
+      ],
+      warningText: 'Once registration is confirmed, the selected T-shirt size cannot be changed.'
+    };
+  }
+
+  async function loadTshirtSettings() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/tshirt-settings");
+      var data = await res.json();
+      if (data && data.success && data.settings) return data.settings;
+    } catch (err) {
+      console.warn("T-shirt settings load error:", err);
+    }
+    return defaultTshirtSettings();
+  }
+
+  // A category (kids/adults) may only be offered a t-shirt when BOTH the
+  // Registration Form Builder's "T-Shirt Size" field is enabled AND the
+  // T-Shirt Settings page marks that category eligible.
+  function isTshirtEligibleForCurrentUser(isKids) {
+    if (!isFieldEnabled('tshirtSize')) return false;
+    var settings = currentTshirtSettings || defaultTshirtSettings();
+    return !!(isKids ? settings.kidsEnabled : settings.adultsEnabled);
+  }
+
+  function populateSizeChartModal(settings) {
+    var tbody = document.getElementById('sizeChartTableBody');
+    var warningTextEl = document.getElementById('sizeChartWarningText');
+    if (!settings) return;
+
+    if (tbody && Array.isArray(settings.sizeChart)) {
+      tbody.innerHTML = '';
+      settings.sizeChart.forEach(function (row) {
+        var tr = document.createElement('tr');
+        [row.size, row.chest || '', row.width, row.height].forEach(function (val) {
+          var td = document.createElement('td');
+          td.textContent = val;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+    if (warningTextEl && settings.warningText) {
+      warningTextEl.textContent = settings.warningText;
+    }
   }
 
   function defaultRegistrationFormConfig() {
@@ -718,7 +786,10 @@ document.addEventListener('DOMContentLoaded', function () {
     updateRegistrationSummary();
   }
 
-  loadRegistrationFormConfig().then(function (config) {
+  Promise.all([loadRegistrationFormConfig(), loadTshirtSettings()]).then(function (results) {
+    var config = results[0];
+    currentTshirtSettings = results[1];
+    populateSizeChartModal(currentTshirtSettings);
     buildRegistrationSteps(config);
     initRegistrationPopup(config);
     checkStatus();
@@ -827,14 +898,20 @@ document.addEventListener('DOMContentLoaded', function () {
     if (isKids) {
       if (categoryNameEl) categoryNameEl.textContent = '3.5 KM FUN RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: ' + cutoff + ' & Below';
-      if (tshirtFormGroup) tshirtFormGroup.style.display = 'none';
-      if (tshirtSelect) tshirtSelect.value = 'N/A';
-      clearError('tshirt');
     } else {
       if (categoryNameEl) categoryNameEl.textContent = '7 KM TIMED RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: Above ' + cutoff + ' Years';
-      if (tshirtFormGroup) tshirtFormGroup.style.display = '';
-      if (tshirtSelect && tshirtSelect.value === 'N/A') tshirtSelect.value = '';
+    }
+
+    // T-shirt visibility follows eligibility (T-Shirt Settings admin page),
+    // not just participant type — either category can be enabled/disabled.
+    var tshirtEligible = isTshirtEligibleForCurrentUser(isKids);
+    if (tshirtFormGroup) tshirtFormGroup.style.display = tshirtEligible ? '' : 'none';
+    if (!tshirtEligible) {
+      if (tshirtSelect) tshirtSelect.value = 'N/A';
+      clearError('tshirt');
+    } else if (tshirtSelect && tshirtSelect.value === 'N/A') {
+      tshirtSelect.value = '';
     }
 
     updateRegistrationSummary();
@@ -955,14 +1032,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function validateTshirt() {
-    var dob = parseDOB(dobInput.value);
-    if (dob) {
-      var age = calculateAge(dob, EVENT_DATE);
-      if (age <= getAgeCutoff()) {
-        clearError('tshirt');
-        return true;
-      }
-    }
+    // tshirtFormGroup's display already reflects eligibility (T-Shirt Settings
+    // admin page) for whichever participant type the current DOB resolves to —
+    // set in updateCategory(), which always runs before this validator.
     if (tshirtFormGroup && tshirtFormGroup.style.display === 'none') {
       clearError('tshirt');
       return true;
@@ -1230,8 +1302,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (isFieldEnabled('district')) payload.district = districtSelect.value;
     if (isFieldEnabled('pincode')) payload.pincode = pincodeInput.value.trim();
     if (isFieldEnabled('tshirtSize')) {
-      payload.tshirtSize = isKidsUser ? "N/A" : (tshirtSelect.value || "M");
-      payload.tshirtSelected = !isKidsUser && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A";
+      var tshirtEligibleForSubmit = isTshirtEligibleForCurrentUser(isKidsUser);
+      payload.tshirtSize = tshirtEligibleForSubmit ? (tshirtSelect.value || "M") : "N/A";
+      payload.tshirtSelected = tshirtEligibleForSubmit && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A";
     }
     if (isFieldEnabled('bloodGroup')) payload.bloodGroup = bloodGroupSelect.value;
     if (isFieldEnabled('gender')) payload.gender = selectedGender;

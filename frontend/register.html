@@ -355,36 +355,38 @@
 </footer>
 <div class="footer-copy-bar">© 2026 Chennimalai Marathon. All Rights Reserved. | Designed by <a href="https://cubecorpsol.com" target="_blank" rel="noopener noreferrer" class="footer-credit-link">Cube Corpsol</a></div>
  
-<!-- ===================== T-SHIRT SIZE CHART MODAL ===================== -->
-<div class="modal fade" id="sizeChartModal" tabindex="-1" aria-labelledby="sizeChartModalLabel" aria-hidden="true">
+<!-- ===================== T-SHIRT SIZE CHART MODAL =====================
+     Size chart rows + warning text are admin-controlled (T-Shirt Settings
+     page) and populated at runtime by js/script.js. -->
+<div class="modal fade size-chart-modal" id="sizeChartModal" tabindex="-1" aria-labelledby="sizeChartModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
+    <div class="modal-content size-chart-modal-content">
+      <div class="modal-header size-chart-modal-header">
+        <span class="size-chart-modal-icon"><i class="fa-solid fa-shirt"></i></span>
         <h5 class="modal-title" id="sizeChartModalLabel">T-Shirt Size Chart</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="size-chart-modal-close" data-bs-dismiss="modal" aria-label="Close">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div class="modal-body">
-        <p>Choose your size carefully before registering.</p>
+        <p class="size-chart-intro">Choose your size carefully before registering.</p>
         <div class="table-responsive">
-          <table class="table table-bordered text-center size-chart-table">
+          <table class="size-chart-table" id="sizeChartTable">
             <thead>
-              <tr><th>Size</th><th>Width (in)</th><th>Height (in)</th></tr>
+              <tr><th>Size</th><th>Chest (in)</th><th>Width (in)</th><th>Height (in)</th></tr>
             </thead>
-            <tbody>
-              <tr><td>XS (34)</td><td>17</td><td>24.75</td></tr>
-              <tr><td>S (36)</td><td>18</td><td>26.25</td></tr>
-              <tr><td>M (38)</td><td>19</td><td>27.75</td></tr>
-              <tr><td>L (40)</td><td>20</td><td>28.75</td></tr>
-              <tr><td>XL (42)</td><td>21</td><td>29.75</td></tr>
-              <tr><td>XXL (44)</td><td>22</td><td>30.75</td></tr>
-              <tr><td>XXXL (46)</td><td>23</td><td>31.75</td></tr>
+            <tbody id="sizeChartTableBody">
+              <!-- Rows injected from /api/tshirt-settings by js/script.js -->
             </tbody>
           </table>
         </div>
-        <p class="size-chart-warning">⚠️ Once registration is confirmed, the selected T-shirt size cannot be changed.</p>
+        <p class="size-chart-warning" id="sizeChartWarning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span id="sizeChartWarningText">Once registration is confirmed, the selected T-shirt size cannot be changed.</span>
+        </p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn-continue size-chart-close-btn" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
