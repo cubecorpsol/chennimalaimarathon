@@ -509,6 +509,34 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // The actual selectable sizes in the T-Shirt Size dropdown come from the same
+  // admin-configured size chart (T-Shirt Settings page) — adding/removing a row
+  // there adds/removes it as a selectable option here too.
+  function populateTshirtSizeOptions(settings) {
+    if (!tshirtSelect || !settings || !Array.isArray(settings.sizeChart) || !settings.sizeChart.length) return;
+
+    var currentValue = tshirtSelect.value;
+    tshirtSelect.innerHTML = '';
+
+    var placeholderOpt = document.createElement('option');
+    placeholderOpt.value = '';
+    placeholderOpt.textContent = 'Select T-Shirt Size';
+    tshirtSelect.appendChild(placeholderOpt);
+
+    var validValues = [];
+    settings.sizeChart.forEach(function (row) {
+      var opt = document.createElement('option');
+      opt.value = row.size;
+      opt.textContent = row.size;
+      tshirtSelect.appendChild(opt);
+      validValues.push(row.size);
+    });
+
+    if (currentValue && (validValues.indexOf(currentValue) !== -1 || currentValue === 'N/A')) {
+      tshirtSelect.value = currentValue;
+    }
+  }
+
   function defaultRegistrationFormConfig() {
     return {
       steps: [
@@ -790,6 +818,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var config = results[0];
     currentTshirtSettings = results[1];
     populateSizeChartModal(currentTshirtSettings);
+    populateTshirtSizeOptions(currentTshirtSettings);
     buildRegistrationSteps(config);
     initRegistrationPopup(config);
     checkStatus();
