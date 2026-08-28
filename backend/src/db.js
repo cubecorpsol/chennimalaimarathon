@@ -19,7 +19,12 @@ const SettingsSchema = new mongoose.Schema({
   paymentGateway: { type: String, enum: ["razorpay", "payu"], default: "razorpay" },
   volunteerPageOpen: { type: Boolean, default: true },
   volunteerPromoEnabled: { type: Boolean, default: true },
-  payPageOpen: { type: Boolean, default: true }
+  payPageOpen: { type: Boolean, default: true },
+  // Which BIB(s) get auto-assigned the moment a registration's payment succeeds.
+  // "temp" preserves today's behavior; "permanent"/"both" also auto-assign a
+  // permanent BIB via permanentBibCounter below.
+  autoBibAllocationMode: { type: String, enum: ["temp", "permanent", "both"], default: "temp" },
+  permanentBibCounter: { type: Number, default: 1001 }
 }, { timestamps: true });
 
 const RegistrationSchema = new mongoose.Schema({
@@ -83,11 +88,13 @@ const ContactMessageSchema = new mongoose.Schema({
 const VolunteerSchema = new mongoose.Schema({
   name: { type: String, required: true },
   age: { type: Number, required: true },
+  gender: { type: String, default: "male" },
   phone: { type: String, required: true },
   email: { type: String, required: true, index: true },
   district: { type: String, required: true },
   tshirtSize: { type: String, required: true },
-  role: { type: String, required: true },
+  // Preferred role field is currently hidden on the public volunteer form.
+  role: { type: String, default: "" },
   experience: { type: String, default: "No" },
   message: { type: String, default: "" }
 }, { timestamps: true });
@@ -133,6 +140,128 @@ const SponsorshipSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Sponsorship = mongoose.models.Sponsorship || mongoose.model("Sponsorship", SponsorshipSchema);
+
+// VIP / Reserved permanent BIB numbers — excluded from auto-allocation (both the
+// admin's single/bulk permanent-bib tools and the auto-on-payment-success path
+// below). Mirrors chennimalaimarathon-admin/db.js — same collection.
+const ReservedBibSchema = new mongoose.Schema({
+  bibNumber: { type: String, required: true, unique: true, trim: true },
+  label: { type: String, default: "VIP" },
+  note: { type: String, default: "" },
+  reservedBy: {
+    id: { type: String, default: "" },
+    name: { type: String, default: "" },
+    email: { type: String, default: "" }
+  }
+}, { timestamps: true });
+
+const ReservedBib = mongoose.models.ReservedBib || mongoose.model("ReservedBib", ReservedBibSchema);
+
+// Superadmin-configurable register.html field/step layout + system messages.
+// Singleton, like Settings — one document holds the whole active configuration.
+const RegistrationFormFieldSchema = new mongoose.Schema({
+  key: { type: String, required: true },
+  enabled: { type: Boolean, default: true },
+  required: { type: Boolean, default: true },
+  label: { type: String, default: "" },
+  placeholder: { type: String, default: "" },
+  errorMessage: { type: String, default: "" }
+}, { _id: false });
+
+const RegistrationFormStepSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  title: { type: String, required: true },
+  subtitle: { type: String, default: "" },
+  order: { type: Number, required: true },
+  fields: [RegistrationFormFieldSchema]
+}, { _id: false });
+
+const RegistrationFormConfigSchema = new mongoose.Schema({
+  steps: [RegistrationFormStepSchema],
+  messages: {
+    closedTitle: { type: String, default: "Registrations Closed" },
+    closedText: { type: String, default: "All slots for the Chennimalai Marathon 2026 have been filled, or registrations are currently closed. Thank you to everyone who joined us!" },
+    successTitle: { type: String, default: "You're registered!" },
+    successText: { type: String, default: "Thank you for registering for the Chennimalai Marathon. A confirmation will be sent to your email — please check your Spam folder too." },
+    // Announcement popup shown once per browser session on register.html — off by
+    // default, admin opts in with their own title/message.
+    popupEnabled: { type: Boolean, default: false },
+    popupTitle: { type: String, default: "" },
+    popupText: { type: String, default: "" }
+  }
+}, { timestamps: true });
+
+const RegistrationFormConfig = mongoose.models.RegistrationFormConfig || mongoose.model("RegistrationFormConfig", RegistrationFormConfigSchema);
+
+// Reproduces today's hardcoded register.html layout exactly, so seeding this
+// changes nothing visually until a superadmin edits it via the admin panel.
+const DEFAULT_REGISTRATION_FORM_CONFIG = {
+  steps: [
+    {
+      id: "step-1",
+      title: "Personal Details",
+      subtitle: "Please provide your basic information to continue.",
+      order: 0,
+      fields: [
+        { key: "fullName", enabled: true, required: true },
+        { key: "dob", enabled: true, required: true },
+        { key: "phone", enabled: true, required: true },
+        { key: "email", enabled: true, required: true },
+        { key: "district", enabled: true, required: true },
+        { key: "pincode", enabled: true, required: true },
+        { key: "tshirtSize", enabled: true, required: true },
+        { key: "bloodGroup", enabled: true, required: true }
+      ]
+    },
+    {
+      id: "step-2",
+      title: "Additional Details",
+      subtitle: "Almost there! Just a few more details to complete your registration.",
+      order: 1,
+      fields: [
+        { key: "gender", enabled: true, required: true },
+        { key: "emergencyContact", enabled: true, required: true },
+        { key: "fitnessConfirm", enabled: true, required: true }
+      ]
+    }
+  ],
+  messages: {}
+};
+
+// Superadmin-configurable T-shirt eligibility (per participant type) + the
+// reference size chart shown in register.html's "View Size Chart" popup.
+const TshirtSizeChartRowSchema = new mongoose.Schema({
+  size: { type: String, required: true },
+  chest: { type: String, default: "" },
+  width: { type: Number, required: true },
+  height: { type: Number, required: true }
+}, { _id: false });
+
+const TshirtSettingsSchema = new mongoose.Schema({
+  kidsEnabled: { type: Boolean, default: false },
+  adultsEnabled: { type: Boolean, default: true },
+  sizeChart: [TshirtSizeChartRowSchema],
+  warningText: { type: String, default: "Once registration is confirmed, the selected T-shirt size cannot be changed." }
+}, { timestamps: true });
+
+const TshirtSettings = mongoose.models.TshirtSettings || mongoose.model("TshirtSettings", TshirtSettingsSchema);
+
+// Reproduces today's hardcoded size-chart table exactly, and today's hardcoded
+// eligibility rule (kids never get a t-shirt, adults always do).
+const DEFAULT_TSHIRT_SETTINGS = {
+  kidsEnabled: false,
+  adultsEnabled: true,
+  sizeChart: [
+    { size: "XS", chest: "34", width: 17, height: 24.75 },
+    { size: "S", chest: "36", width: 18, height: 26.25 },
+    { size: "M", chest: "38", width: 19, height: 27.75 },
+    { size: "L", chest: "40", width: 20, height: 28.75 },
+    { size: "XL", chest: "42", width: 21, height: 29.75 },
+    { size: "XXL", chest: "44", width: 22, height: 30.75 },
+    { size: "XXXL", chest: "46", width: 23, height: 31.75 }
+  ],
+  warningText: "Once registration is confirmed, the selected T-shirt size cannot be changed."
+};
 
 // Cached connection — required on Vercel serverless so cold starts don't
 // hit Mongoose buffering timeouts (settings.findOne() timed out after 10000ms).
@@ -245,6 +374,39 @@ async function seedInitialData() {
     if (backfilled.modifiedCount > 0) {
       console.log(`🌱 [DB SEED] Backfilled tempBibNumber from tshirtNumber for ${backfilled.modifiedCount} registrations.`);
     }
+
+    // 4. Seed the default registration form config if none exists
+    const formConfigCount = await RegistrationFormConfig.countDocuments();
+    if (formConfigCount === 0) {
+      await RegistrationFormConfig.create(DEFAULT_REGISTRATION_FORM_CONFIG);
+      console.log("🌱 [DB SEED] Default Registration Form Config initialized.");
+    }
+
+    // 5. Seed the default t-shirt settings if none exists
+    const tshirtSettingsCount = await TshirtSettings.countDocuments();
+    if (tshirtSettingsCount === 0) {
+      await TshirtSettings.create(DEFAULT_TSHIRT_SETTINGS);
+      console.log("🌱 [DB SEED] Default T-Shirt Settings initialized.");
+    }
+
+    // 6. Migrate the existing Settings doc to have a permanentBibCounter — a doc
+    // saved before this feature existed won't have the path at all, and $inc on
+    // a genuinely missing path starts it at the increment amount (1), not the
+    // schema default (1001).
+    const settingsMissingCounter = await Settings.findOne({ permanentBibCounter: { $exists: false } }).select("_id");
+    if (settingsMissingCounter) {
+      await Settings.updateOne({ _id: settingsMissingCounter._id }, { $set: { permanentBibCounter: 1001 } });
+      console.log("🌱 [DB SEED] Initialized permanentBibCounter to 1001.");
+    }
+
+    // 7. Backfill gender=male for volunteer applications submitted before the gender field existed
+    const volunteersBackfilled = await Volunteer.updateMany(
+      { gender: { $exists: false } },
+      { $set: { gender: "male" } }
+    );
+    if (volunteersBackfilled.modifiedCount > 0) {
+      console.log(`🌱 [DB SEED] Backfilled gender=male for ${volunteersBackfilled.modifiedCount} volunteer applications.`);
+    }
   } catch (err) {
     console.error("❌ DB_SEED_ERROR:", err.message);
   }
@@ -257,6 +419,11 @@ module.exports = {
   AdminUser,
   Sponsorship,
   ContactMessage,
-  Volunteer
+  Volunteer,
+  RegistrationFormConfig,
+  DEFAULT_REGISTRATION_FORM_CONFIG,
+  TshirtSettings,
+  DEFAULT_TSHIRT_SETTINGS,
+  ReservedBib
 };
 

@@ -1,0 +1,194 @@
+/* ============================================================
+   Chennimalai Marathon — Finisher Certificate Download
+   Talks to the ADMIN backend's public endpoint (a separate deployment from this
+   site's own registration backend), not js/marathon-api.js's BACKEND_URL.
+   Every check (email/BIB match, finished status, review hold) happens server-side —
+   this file only collects input, shows the right message, and saves the file the
+   server sends back. Nothing about certificate generation or storage is exposed here.
+   ============================================================ */
+
+const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
+
+(function () {
+  const checkingBlock = document.getElementById("certCheckingBlock");
+  const closedBlock = document.getElementById("certClosedBlock");
+  const closedText = document.getElementById("certClosedText");
+  const availableBlock = document.getElementById("certAvailableBlock");
+
+  const locationRow = document.getElementById("certLocationStatus");
+  const locationText = document.getElementById("certLocationText");
+  const downloadBtn = document.getElementById("certDownloadBtn");
+  const emailInput = document.getElementById("crEmail");
+  const emailError = document.getElementById("crEmail-error");
+  const bibInput = document.getElementById("crBib");
+  const bibError = document.getElementById("crBib-error");
+
+  const modalOverlay = document.getElementById("crAlertModalOverlay");
+  const modalIcon = document.getElementById("crAlertModalIcon");
+  const modalMessage = document.getElementById("crAlertModalMessage");
+  const modalClose = document.getElementById("crAlertModalClose");
+
+  // Best-effort only — logged alongside the download for the admin's records, but a runner who
+  // denies (or whose browser lacks) location support can still download their own certificate.
+  let coords = null; // { lat, lng, accuracy }
+  let locationStatus = "Unavailable";
+
+  function showModal(ok, message) {
+    modalIcon.classList.toggle("success", !!ok);
+    modalIcon.innerHTML = ok
+      ? '<i class="fa-solid fa-circle-check"></i>'
+      : '<i class="fa-solid fa-circle-exclamation"></i>';
+    modalMessage.textContent = message;
+    modalOverlay.classList.add("open");
+  }
+  modalClose?.addEventListener("click", () => modalOverlay.classList.remove("open"));
+
+  const DEFAULT_CLOSED_MESSAGE = "Certificate downloads aren't available yet. Please complete the marathon and come back to this page to download your details.";
+
+  function showClosed(message) {
+    checkingBlock.style.display = "none";
+    availableBlock.style.display = "none";
+    closedBlock.style.display = "flex";
+    closedText.textContent = message || DEFAULT_CLOSED_MESSAGE;
+  }
+
+  function showAvailable() {
+    checkingBlock.style.display = "none";
+    closedBlock.style.display = "none";
+    availableBlock.style.display = "block";
+    requestLocation();
+  }
+
+  // Checks with the admin backend whether downloads are turned on before ever showing the form —
+  // the actual gate is enforced server-side too (POST /certificate-download refuses regardless of
+  // what this page shows), this just avoids showing a form that would fail on submit anyway.
+  async function checkAvailability() {
+    if (ADMIN_API_BASE.includes("REPLACE_WITH_ADMIN_BACKEND_URL")) {
+      showClosed("Certificate downloads aren't configured yet — please contact the event team.");
+      return;
+    }
+    try {
+      const res = await fetch(`${ADMIN_API_BASE}/api/public/certificate-download-status`);
+      const data = await res.json();
+      if (res.ok && data.success && data.enabled) {
+        showAvailable();
+      } else {
+        showClosed(data.message);
+      }
+    } catch {
+      showClosed("Couldn't check certificate download availability — please try again shortly.");
+    }
+  }
+
+  function setLocationRow(state, text) {
+    locationRow.classList.remove("ok", "err");
+    if (state === "ok") locationRow.classList.add("ok");
+    if (state === "err") locationRow.classList.add("err");
+    locationText.textContent = text;
+  }
+
+  function requestLocation() {
+    if (!("geolocation" in navigator)) {
+      locationStatus = "Unavailable";
+      setLocationRow("err", "Location isn't available in this browser — you can still download your certificate.");
+      return;
+    }
+    setLocationRow("", "Requesting your location…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        coords = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        };
+        locationStatus = "Granted";
+        setLocationRow("ok", "Location captured for your download record.");
+      },
+      () => {
+        locationStatus = "Denied";
+        setLocationRow("err", "Location permission denied — you can still download your certificate.");
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  function clearErrors() {
+    emailError.textContent = "";
+    bibError.textContent = "";
+  }
+
+  function setButtonBusy(busy) {
+    downloadBtn.disabled = busy;
+    downloadBtn.innerHTML = busy
+      ? '<i class="fa-solid fa-spinner fa-spin"></i> PREPARING YOUR CERTIFICATE…'
+      : '<i class="fa-solid fa-download"></i> DOWNLOAD CERTIFICATE';
+  }
+
+  // Extracts filename="..." from a Content-Disposition header, falling back to a generic name.
+  function filenameFromDisposition(header) {
+    const match = /filename="?([^"]+)"?/i.exec(header || "");
+    return match ? match[1] : "Finisher-Certificate.pdf";
+  }
+
+  async function submitDownload() {
+    clearErrors();
+    const email = (emailInput.value || "").trim();
+    const bibNumber = (bibInput.value || "").trim();
+    let hasError = false;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailError.textContent = "Enter a valid email address.";
+      hasError = true;
+    }
+    if (!bibNumber) {
+      bibError.textContent = "Enter your BIB number.";
+      hasError = true;
+    }
+    if (hasError) return;
+
+    if (ADMIN_API_BASE.includes("REPLACE_WITH_ADMIN_BACKEND_URL")) {
+      showModal(false, "Certificate downloads aren't configured yet — please contact the event team.");
+      return;
+    }
+
+    setButtonBusy(true);
+    try {
+      const res = await fetch(`${ADMIN_API_BASE}/api/public/certificate-download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          bibNumber,
+          lat: coords?.lat,
+          lng: coords?.lng,
+          accuracy: coords?.accuracy,
+          locationStatus
+        })
+      });
+
+      const contentType = res.headers.get("Content-Type") || "";
+      if (res.ok && contentType.includes("application/pdf")) {
+        const blob = await res.blob();
+        const filename = filenameFromDisposition(res.headers.get("Content-Disposition"));
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showModal(true, "Your certificate has downloaded to your device.");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showModal(false, data.message || "Couldn't download your certificate. Please try again or contact the event team.");
+      }
+    } catch {
+      showModal(false, "Couldn't reach the certificate service. Check your connection and try again.");
+    } finally {
+      setButtonBusy(false);
+    }
+  }
+
+  downloadBtn?.addEventListener("click", submitDownload);
+  checkAvailability();
+})();

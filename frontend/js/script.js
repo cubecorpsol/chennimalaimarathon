@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 /* =========================================================
    LIVE REMAINING SLOTS BADGE — the small in-form pill on the
-   register page (#remainingSlotsBadge inside step-personal, or
+   register page (#remainingSlotsBadge inside the first built step, or
    any .remaining-slots-box). Mirrors the admin "show remaining
    slots" toggle exposed via /api/status. Irrelevant while
    registrations are closed because its parent step is swapped
@@ -243,11 +243,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!hint) return;
     var cutoff = getAgeCutoff();
     var tshirtPrice = Number(currentSettings.tshirtPrice ?? 0);
-    if (tshirtPrice > 0) {
-      hint.textContent = 'Available only for runners aged above ' + cutoff + ' (7 KM category). Charge: ' + formatRupee(tshirtPrice) + '.';
-    } else {
-      hint.textContent = 'Complimentary for runners aged above ' + cutoff + ' (7 KM category).';
-    }
+    var settings = currentTshirtSettings || defaultTshirtSettings();
+    var eligibilityText = settings.kidsEnabled && settings.adultsEnabled
+      ? 'Available for all participants'
+      : (settings.adultsEnabled ? 'Available only for runners aged above ' + cutoff + ' (7 KM category)' : 'Available only for the 3.5 KM Fun Run category');
+    hint.textContent = tshirtPrice > 0
+      ? eligibilityText + '. Charge: ' + formatRupee(tshirtPrice) + '.'
+      : eligibilityText + '.';
   }
 
   function updateRegistrationSummary() {
@@ -271,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var tshirtSelectEl = document.getElementById('tshirt');
-    var tshirtSelected = !isKids && tshirtSelectEl &&
+    var tshirtSelected = isTshirtEligibleForCurrentUser(isKids) && tshirtSelectEl &&
       tshirtSelectEl.value !== "" &&
       tshirtSelectEl.value !== "NO" &&
       tshirtSelectEl.value !== "N/A";
@@ -334,19 +336,19 @@ document.addEventListener('DOMContentLoaded', function () {
     var closedStep = document.getElementById('step-closed');
     var successStep = document.getElementById('step-success');
     if (closedStep && !(successStep && successStep.classList.contains('active'))) {
-      formSteps.forEach(function (step) { step.classList.remove('active'); });
+      document.querySelectorAll('.form-step').forEach(function (step) { step.classList.remove('active'); });
       closedStep.classList.add('active');
     }
     lockRegistrationButtons();
   }
 
-  // Restores the regular step-1 flow — used when /api/status reports
+  // Restores the regular first-step flow — used when /api/status reports
   // registrations are open (default state on every fresh page load).
   function showRegistrationsOpenFlow() {
     var closedStep = document.getElementById('step-closed');
     if (closedStep && closedStep.classList.contains('active')) {
       closedStep.classList.remove('active');
-      var personalStep = document.getElementById('step-personal');
+      var personalStep = firstStepId ? document.getElementById(firstStepId) : null;
       if (personalStep) personalStep.classList.add('active');
     }
     if (registerBtn) {
@@ -383,14 +385,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  checkStatus();
-
   /* ---------------------------------------------------------
      Element references
   --------------------------------------------------------- */
-  var formSteps = document.querySelectorAll('.form-step');
-
-  // Step 1 — Personal Details
   var fullNameInput    = document.getElementById('fullName');
   var dobInput         = document.getElementById('dob');
   var phoneInput       = document.getElementById('phone');
@@ -399,18 +396,433 @@ document.addEventListener('DOMContentLoaded', function () {
   var pincodeInput     = document.getElementById('pincode');
   var tshirtSelect     = document.getElementById('tshirt');
   var bloodGroupSelect = document.getElementById('bloodGroup');
-  var continueBtn      = document.getElementById('continueBtn');
+  var continueBtn      = null; // assigned once the config-driven steps are built, below
 
-  // Step 2 — Additional Details
-  var backToPersonal        = document.getElementById('backToPersonal');
   var categoryNameEl        = document.getElementById('categoryName');
   var categoryAgeEl         = document.getElementById('categoryAge');
   var genderBoxes           = document.querySelectorAll('.gender-row .option-box');
   var emergencyContactInput = document.getElementById('emergencyContact');
   var fitnessCheckbox       = document.getElementById('fitnessConfirm');
-  var registerBtn           = document.getElementById('registerBtn');
+  var registerBtn           = null; // assigned once the config-driven steps are built, below
 
   var selectedGender = null;
+
+  /* ---------------------------------------------------------
+     Registration Form Builder — dynamic steps/fields, driven by
+     /api/registration-form-config (superadmin-editable in the admin
+     panel). Falls back to today's default 2-step layout if that
+     request fails, so the page keeps working even if the API is down.
+  --------------------------------------------------------- */
+  var fieldPool             = document.getElementById('fieldPool');
+  var closingBlockPool      = document.getElementById('closingBlockPool');
+  var infoBoxPool           = document.getElementById('infoBoxPool');
+  var dynamicStepsContainer = document.getElementById('dynamicStepsContainer');
+
+  var PAIRABLE_FIELD_KEYS = ['fullName', 'dob', 'phone', 'email', 'district', 'pincode', 'tshirtSize', 'bloodGroup'];
+  var DOM_ID_FOR_KEY = { tshirtSize: 'tshirt' };
+  var currentFormConfig = null;
+  var firstStepId = null;
+
+  function domIdForKey(key) {
+    return DOM_ID_FOR_KEY[key] || key;
+  }
+
+  function getFieldConfig(key) {
+    if (!currentFormConfig) return { enabled: true, required: true };
+    for (var i = 0; i < currentFormConfig.steps.length; i++) {
+      var fields = currentFormConfig.steps[i].fields || [];
+      for (var j = 0; j < fields.length; j++) {
+        if (fields[j].key === key) return fields[j];
+      }
+    }
+    return { enabled: false, required: false };
+  }
+
+  function isFieldEnabled(key) {
+    var cfg = getFieldConfig(key);
+    return !!(cfg && cfg.enabled);
+  }
+
+  /* ---------------------------------------------------------
+     T-Shirt Settings — admin-configurable eligibility (per
+     participant type) + the "View Size Chart" popup's data.
+     Driven by /api/tshirt-settings (T-Shirt Settings admin page).
+  --------------------------------------------------------- */
+  var currentTshirtSettings = null;
+
+  function defaultTshirtSettings() {
+    return {
+      kidsEnabled: false,
+      adultsEnabled: true,
+      sizeChart: [
+        { size: 'XS', chest: '34', width: 17, height: 24.75 },
+        { size: 'S', chest: '36', width: 18, height: 26.25 },
+        { size: 'M', chest: '38', width: 19, height: 27.75 },
+        { size: 'L', chest: '40', width: 20, height: 28.75 },
+        { size: 'XL', chest: '42', width: 21, height: 29.75 },
+        { size: 'XXL', chest: '44', width: 22, height: 30.75 },
+        { size: 'XXXL', chest: '46', width: 23, height: 31.75 }
+      ],
+      warningText: 'Once registration is confirmed, the selected T-shirt size cannot be changed.'
+    };
+  }
+
+  async function loadTshirtSettings() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/tshirt-settings");
+      var data = await res.json();
+      if (data && data.success && data.settings) return data.settings;
+    } catch (err) {
+      console.warn("T-shirt settings load error:", err);
+    }
+    return defaultTshirtSettings();
+  }
+
+  // A category (kids/adults) may only be offered a t-shirt when BOTH the
+  // Registration Form Builder's "T-Shirt Size" field is enabled AND the
+  // T-Shirt Settings page marks that category eligible.
+  function isTshirtEligibleForCurrentUser(isKids) {
+    if (!isFieldEnabled('tshirtSize')) return false;
+    var settings = currentTshirtSettings || defaultTshirtSettings();
+    return !!(isKids ? settings.kidsEnabled : settings.adultsEnabled);
+  }
+
+  function populateSizeChartModal(settings) {
+    var tbody = document.getElementById('sizeChartTableBody');
+    var warningTextEl = document.getElementById('sizeChartWarningText');
+    if (!settings) return;
+
+    if (tbody && Array.isArray(settings.sizeChart)) {
+      tbody.innerHTML = '';
+      settings.sizeChart.forEach(function (row) {
+        var tr = document.createElement('tr');
+        [row.size, row.chest || '', row.width, row.height].forEach(function (val) {
+          var td = document.createElement('td');
+          td.textContent = val;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+    if (warningTextEl && settings.warningText) {
+      warningTextEl.textContent = settings.warningText;
+    }
+  }
+
+  // The actual selectable sizes in the T-Shirt Size dropdown come from the same
+  // admin-configured size chart (T-Shirt Settings page) — adding/removing a row
+  // there adds/removes it as a selectable option here too.
+  function populateTshirtSizeOptions(settings) {
+    if (!tshirtSelect || !settings || !Array.isArray(settings.sizeChart) || !settings.sizeChart.length) return;
+
+    var currentValue = tshirtSelect.value;
+    tshirtSelect.innerHTML = '';
+
+    var placeholderOpt = document.createElement('option');
+    placeholderOpt.value = '';
+    placeholderOpt.textContent = 'Select T-Shirt Size';
+    tshirtSelect.appendChild(placeholderOpt);
+
+    var validValues = [];
+    settings.sizeChart.forEach(function (row) {
+      var opt = document.createElement('option');
+      opt.value = row.size;
+      opt.textContent = row.size;
+      tshirtSelect.appendChild(opt);
+      validValues.push(row.size);
+    });
+
+    if (currentValue && (validValues.indexOf(currentValue) !== -1 || currentValue === 'N/A')) {
+      tshirtSelect.value = currentValue;
+    }
+  }
+
+  function defaultRegistrationFormConfig() {
+    return {
+      steps: [
+        {
+          id: 'step-1', title: 'Personal Details',
+          subtitle: 'Please provide your basic information to continue.', order: 0,
+          fields: [
+            { key: 'fullName', enabled: true, required: true }, { key: 'dob', enabled: true, required: true },
+            { key: 'phone', enabled: true, required: true }, { key: 'email', enabled: true, required: true },
+            { key: 'district', enabled: true, required: true }, { key: 'pincode', enabled: true, required: true },
+            { key: 'tshirtSize', enabled: true, required: true }, { key: 'bloodGroup', enabled: true, required: true }
+          ]
+        },
+        {
+          id: 'step-2', title: 'Additional Details',
+          subtitle: 'Almost there! Just a few more details to complete your registration.', order: 1,
+          fields: [
+            { key: 'gender', enabled: true, required: true }, { key: 'emergencyContact', enabled: true, required: true },
+            { key: 'fitnessConfirm', enabled: true, required: true }
+          ]
+        }
+      ],
+      messages: {}
+    };
+  }
+
+  async function loadRegistrationFormConfig() {
+    try {
+      var res = await fetch(BACKEND_URL + "/api/registration-form-config");
+      var data = await res.json();
+      if (data && data.success && data.config && Array.isArray(data.config.steps) && data.config.steps.length) {
+        return data.config;
+      }
+    } catch (err) {
+      console.warn("Registration form config load error:", err);
+    }
+    return defaultRegistrationFormConfig();
+  }
+
+  function applyRegistrationMessages(config) {
+    var messages = (config && config.messages) || {};
+    var closedTitleEl = document.getElementById('closedPanelTitle');
+    var closedTextEl = document.getElementById('closedPanelText');
+    var successTitleEl = document.getElementById('successPanelTitle');
+    var successTextEl = document.getElementById('successPanelText');
+    if (closedTitleEl && messages.closedTitle) closedTitleEl.textContent = messages.closedTitle;
+    if (closedTextEl && messages.closedText) closedTextEl.textContent = messages.closedText;
+    if (successTitleEl && messages.successTitle) successTitleEl.textContent = messages.successTitle;
+    if (successTextEl && messages.successText) successTextEl.textContent = messages.successText;
+  }
+
+  // Admin-configured announcement popup (Registration Form Builder > Announcement
+  // Popup) — off unless the admin enables it, and shown at most once per browser
+  // session, mirroring the homepage's volunteer promo popup.
+  function initRegistrationPopup(config) {
+    var overlay = document.getElementById('registrationPopupOverlay');
+    if (!overlay) return;
+
+    var messages = (config && config.messages) || {};
+    if (!messages.popupEnabled || !(messages.popupTitle || messages.popupText)) return;
+
+    var titleEl = document.getElementById('registrationPopupTitle');
+    var textEl = document.getElementById('registrationPopupText');
+    if (titleEl) titleEl.textContent = messages.popupTitle || '';
+    if (textEl) textEl.textContent = messages.popupText || '';
+
+    var STORAGE_KEY = 'registrationPopupShown';
+    var alreadyShown = false;
+    try { alreadyShown = !!sessionStorage.getItem(STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
+    if (alreadyShown) return;
+
+    function markShown() {
+      try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
+    }
+
+    function closePopup() {
+      overlay.classList.remove('open');
+      markShown();
+    }
+
+    var dismissBtn = document.getElementById('registrationPopupDismiss');
+    var closeBtn = document.getElementById('registrationPopupClose');
+    if (dismissBtn) dismissBtn.addEventListener('click', closePopup);
+    if (closeBtn) closeBtn.addEventListener('click', closePopup);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closePopup();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) closePopup();
+    });
+
+    setTimeout(function () { overlay.classList.add('open'); }, 1200);
+  }
+
+  // Applies a field's required-star visibility + label/placeholder overrides directly
+  // onto its pooled DOM node, once, right before that node gets moved into a step.
+  function applyFieldOverrides(wrapperEl, fieldCfg) {
+    var starEl = wrapperEl.querySelector('[data-role="required-star"]');
+    if (starEl) starEl.style.display = fieldCfg.required ? '' : 'none';
+    if (fieldCfg.label) {
+      var labelEl = wrapperEl.querySelector('[data-role="label"]');
+      if (labelEl) {
+        var starHtml = starEl ? starEl.outerHTML : '';
+        labelEl.innerHTML = fieldCfg.label + ' ' + starHtml;
+      }
+    }
+    if (fieldCfg.placeholder) {
+      var inputEl = wrapperEl.querySelector('[data-role="input"]');
+      if (inputEl && 'placeholder' in inputEl) inputEl.placeholder = fieldCfg.placeholder;
+    }
+  }
+
+  // Builds the whole step DOM from config, re-parenting the pooled field nodes (never
+  // cloning them) so their ids/values/already-bound listeners keep working unchanged
+  // regardless of which step they end up on.
+  function buildRegistrationSteps(config) {
+    currentFormConfig = config;
+    applyRegistrationMessages(config);
+    if (!dynamicStepsContainer || !fieldPool) return;
+
+    dynamicStepsContainer.innerHTML = '';
+    var steps = config.steps.slice().sort(function (a, b) { return a.order - b.order; });
+    var total = steps.length;
+
+    steps.forEach(function (step, idx) {
+      var isFirst = idx === 0;
+      var isLast = idx === total - 1;
+      var stepEl = document.createElement('div');
+      stepEl.className = 'form-step' + (isFirst ? ' active' : '');
+      stepEl.id = step.id;
+      if (isFirst) firstStepId = step.id;
+
+      var badge = document.createElement('div');
+      badge.className = 'step-badge';
+      badge.textContent = 'STEP ' + (idx + 1) + ' OF ' + total;
+      stepEl.appendChild(badge);
+
+      if (isFirst) {
+        var slotsBadge = document.createElement('div');
+        slotsBadge.className = 'reg-slots-badge';
+        slotsBadge.id = 'remainingSlotsBadge';
+        slotsBadge.style.display = 'none';
+        slotsBadge.innerHTML = '<i class="fa-solid fa-bolt"></i> <span id="remainingSlotsVal">0</span>&nbsp;Registration Slots Remaining';
+        stepEl.appendChild(slotsBadge);
+      }
+
+      var stepper = document.createElement('div');
+      stepper.className = 'register-stepper';
+      steps.forEach(function (s, sIdx) {
+        if (sIdx > 0) {
+          var track = document.createElement('div');
+          track.className = 'stepper-track';
+          var fill = document.createElement('div');
+          fill.className = 'stepper-track-fill' + (sIdx <= idx ? ' full' : '');
+          track.appendChild(fill);
+          stepper.appendChild(track);
+        }
+        var item = document.createElement('div');
+        item.className = 'stepper-item' + (sIdx === idx ? ' active' : (sIdx < idx ? ' completed' : ''));
+        if (sIdx < idx) {
+          var check = document.createElement('span');
+          check.className = 'stepper-check';
+          check.innerHTML = '<i class="fa-solid fa-check"></i>';
+          item.appendChild(check);
+        }
+        var stepLabel = document.createElement('span');
+        stepLabel.className = 'stepper-label';
+        stepLabel.textContent = s.title;
+        item.appendChild(stepLabel);
+        stepper.appendChild(item);
+      });
+      stepEl.appendChild(stepper);
+
+      if (!isFirst) {
+        var back = document.createElement('span');
+        back.className = 'back-link';
+        back.innerHTML = '<i class="fa-solid fa-arrow-left"></i> Back to details';
+        (function (targetId) {
+          back.addEventListener('click', function () { goToStep(targetId); });
+        })(steps[idx - 1].id);
+        stepEl.appendChild(back);
+      }
+
+      var title = document.createElement('h2');
+      title.className = 'form-title';
+      title.textContent = (step.title || '').toUpperCase();
+      stepEl.appendChild(title);
+
+      var underline = document.createElement('div');
+      underline.className = 'form-title-underline';
+      stepEl.appendChild(underline);
+
+      if (step.subtitle) {
+        var subtitle = document.createElement('p');
+        subtitle.className = 'form-subtitle';
+        subtitle.textContent = step.subtitle;
+        stepEl.appendChild(subtitle);
+      }
+
+      // Pair consecutive "standard" input/select fields 2-per-row (matching today's
+      // layout); gender/fitnessConfirm always render full-width and solo.
+      var pending = null;
+      function flushPending() {
+        if (!pending) return;
+        var row = document.createElement('div');
+        row.className = 'form-row';
+        pending.style.gridColumn = '1 / -1';
+        row.appendChild(pending);
+        stepEl.appendChild(row);
+        pending = null;
+      }
+
+      (step.fields || []).forEach(function (fieldCfg) {
+        var wrapper = fieldPool.querySelector('[data-field-key="' + fieldCfg.key + '"]');
+        if (!wrapper || !fieldCfg.enabled) return;
+        applyFieldOverrides(wrapper, fieldCfg);
+
+        if (PAIRABLE_FIELD_KEYS.indexOf(fieldCfg.key) !== -1) {
+          if (!pending) {
+            pending = wrapper;
+          } else {
+            var row = document.createElement('div');
+            row.className = 'form-row';
+            row.appendChild(pending);
+            row.appendChild(wrapper);
+            stepEl.appendChild(row);
+            pending = null;
+          }
+        } else {
+          flushPending();
+          stepEl.appendChild(wrapper);
+        }
+      });
+      flushPending();
+
+      if (isLast && closingBlockPool) {
+        while (closingBlockPool.firstChild) stepEl.appendChild(closingBlockPool.firstChild);
+      }
+
+      var actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'btn-continue';
+      actionBtn.innerHTML = isLast
+        ? 'REGISTER NOW <i class="fa-solid fa-arrow-right"></i>'
+        : 'CONTINUE <i class="fa-solid fa-arrow-right"></i>';
+      (function (thisStep, nextStepId, isLastStep) {
+        actionBtn.addEventListener('click', function () {
+          if (!validateFieldsForStep(thisStep)) return;
+          updateCategory();
+          updateRegistrationSummary();
+          if (isLastStep) {
+            handleFormSubmission();
+          } else {
+            goToStep(nextStepId);
+          }
+        });
+      })(step, isLast ? null : steps[idx + 1].id, isLast);
+      stepEl.appendChild(actionBtn);
+
+      if (isFirst) {
+        continueBtn = actionBtn;
+        if (infoBoxPool) {
+          while (infoBoxPool.firstChild) stepEl.appendChild(infoBoxPool.firstChild);
+        }
+      }
+      if (isLast) {
+        registerBtn = actionBtn;
+      }
+
+      dynamicStepsContainer.appendChild(stepEl);
+    });
+
+    updateCategory();
+    updateTshirtHint();
+    updateRegistrationSummary();
+  }
+
+  Promise.all([loadRegistrationFormConfig(), loadTshirtSettings()]).then(function (results) {
+    var config = results[0];
+    currentTshirtSettings = results[1];
+    populateSizeChartModal(currentTshirtSettings);
+    populateTshirtSizeOptions(currentTshirtSettings);
+    buildRegistrationSteps(config);
+    initRegistrationPopup(config);
+    checkStatus();
+  });
 
   // Event date used as reference point for age / category calculation
   var EVENT_DATE = new Date(2026, 7, 31); // 31 Aug 2026
@@ -515,14 +927,20 @@ document.addEventListener('DOMContentLoaded', function () {
     if (isKids) {
       if (categoryNameEl) categoryNameEl.textContent = '3.5 KM FUN RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: ' + cutoff + ' & Below';
-      if (tshirtFormGroup) tshirtFormGroup.style.display = 'none';
-      if (tshirtSelect) tshirtSelect.value = 'N/A';
-      clearError('tshirt');
     } else {
       if (categoryNameEl) categoryNameEl.textContent = '7 KM TIMED RUN';
       if (categoryAgeEl) categoryAgeEl.textContent = 'Age: Above ' + cutoff + ' Years';
-      if (tshirtFormGroup) tshirtFormGroup.style.display = '';
-      if (tshirtSelect && tshirtSelect.value === 'N/A') tshirtSelect.value = '';
+    }
+
+    // T-shirt visibility follows eligibility (T-Shirt Settings admin page),
+    // not just participant type — either category can be enabled/disabled.
+    var tshirtEligible = isTshirtEligibleForCurrentUser(isKids);
+    if (tshirtFormGroup) tshirtFormGroup.style.display = tshirtEligible ? '' : 'none';
+    if (!tshirtEligible) {
+      if (tshirtSelect) tshirtSelect.value = 'N/A';
+      clearError('tshirt');
+    } else if (tshirtSelect && tshirtSelect.value === 'N/A') {
+      tshirtSelect.value = '';
     }
 
     updateRegistrationSummary();
@@ -643,14 +1061,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function validateTshirt() {
-    var dob = parseDOB(dobInput.value);
-    if (dob) {
-      var age = calculateAge(dob, EVENT_DATE);
-      if (age <= getAgeCutoff()) {
-        clearError('tshirt');
-        return true;
-      }
-    }
+    // tshirtFormGroup's display already reflects eligibility (T-Shirt Settings
+    // admin page) for whichever participant type the current DOB resolves to —
+    // set in updateCategory(), which always runs before this validator.
     if (tshirtFormGroup && tshirtFormGroup.style.display === 'none') {
       clearError('tshirt');
       return true;
@@ -672,17 +1085,50 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
-  function validateStep1() {
-    var results = [
-      validateFullName(),
-      validateDOB(),
-      validatePhone(),
-      validateEmail(),
-      validateDistrict(),
-      validatePincode(),
-      validateTshirt(),
-      validateBloodGroup()
-    ];
+  var FIELD_VALIDATORS = {
+    fullName: validateFullName, dob: validateDOB, phone: validatePhone, email: validateEmail,
+    district: validateDistrict, pincode: validatePincode, tshirtSize: validateTshirt,
+    bloodGroup: validateBloodGroup
+    // gender / emergencyContact / fitnessConfirm added below, once defined.
+  };
+
+  var FIELD_RAW_VALUE_GETTERS = {
+    fullName: function () { return fullNameInput.value.trim(); },
+    dob: function () { return dobInput.value.trim(); },
+    phone: function () { return phoneInput.value.trim(); },
+    email: function () { return emailInput.value.trim(); },
+    district: function () { return districtSelect.value; },
+    pincode: function () { return pincodeInput.value.trim(); },
+    tshirtSize: function () { return tshirtSelect.value; },
+    bloodGroup: function () { return bloodGroupSelect.value; }
+  };
+
+  // Validates one config-driven step: skips disabled fields entirely, and for
+  // enabled-but-optional fields only runs the field's format checks when it's
+  // non-empty (an empty optional field is valid). Applies a per-field custom
+  // error message override on failure, when the admin has set one.
+  function validateFieldsForStep(step) {
+    var results = (step.fields || []).map(function (fieldCfg) {
+      if (!fieldCfg.enabled) return true;
+      var validatorFn = FIELD_VALIDATORS[fieldCfg.key];
+      if (!validatorFn) return true;
+
+      if (!fieldCfg.required) {
+        var getter = FIELD_RAW_VALUE_GETTERS[fieldCfg.key];
+        var raw = getter ? getter() : null;
+        var isEmpty = fieldCfg.key === 'fitnessConfirm' ? !raw : (raw === '' || raw === null || raw === undefined);
+        if (isEmpty) {
+          clearError(domIdForKey(fieldCfg.key));
+          return true;
+        }
+      }
+
+      var ok = validatorFn();
+      if (!ok && fieldCfg.errorMessage) {
+        showError(domIdForKey(fieldCfg.key), fieldCfg.errorMessage);
+      }
+      return ok;
+    });
     return results.indexOf(false) === -1;
   }
 
@@ -725,14 +1171,13 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
-  function validateStep2() {
-    var results = [
-      validateGender(),
-      validateEmergencyContact(),
-      validateFitness()
-    ];
-    return results.indexOf(false) === -1;
-  }
+  // Extend the field-key lookup maps (declared earlier) now that these 3 validators exist.
+  FIELD_VALIDATORS.gender = validateGender;
+  FIELD_VALIDATORS.emergencyContact = validateEmergencyContact;
+  FIELD_VALIDATORS.fitnessConfirm = validateFitness;
+  FIELD_RAW_VALUE_GETTERS.gender = function () { return selectedGender; };
+  FIELD_RAW_VALUE_GETTERS.emergencyContact = function () { return emergencyContactInput.value.trim(); };
+  FIELD_RAW_VALUE_GETTERS.fitnessConfirm = function () { return fitnessCheckbox.checked; };
 
   /* ---------------------------------------------------------
      Input filters (digits-only fields)
@@ -828,7 +1273,7 @@ document.addEventListener('DOMContentLoaded', function () {
      Step navigation
   --------------------------------------------------------- */
   function goToStep(stepId) {
-    formSteps.forEach(function (step) { step.classList.remove('active'); });
+    document.querySelectorAll('.form-step').forEach(function (step) { step.classList.remove('active'); });
     var target = document.getElementById(stepId);
     if (target) target.classList.add('active');
 
@@ -858,21 +1303,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
 
-  if (continueBtn) {
-    continueBtn.addEventListener('click', function () {
-      if (validateStep1()) {
-        updateCategory();
-        updateRegistrationSummary();
-        goToStep('step-additional');
-      }
-    });
-  }
-
-  if (backToPersonal) {
-    backToPersonal.addEventListener('click', function () {
-      goToStep('step-personal');
-    });
-  }
+  // Continue/Back/Register button wiring now happens per-step inside
+  // buildRegistrationSteps(), since steps (and which button is "last") are
+  // config-driven rather than fixed to a hardcoded 2-step layout.
 
   /* ---------------------------------------------------------
      BACKEND SUBMISSION & REGISTRATION
@@ -887,19 +1320,24 @@ document.addEventListener('DOMContentLoaded', function () {
     var userAge = dobForAge ? calculateAge(dobForAge, EVENT_DATE) : 20;
     var isKidsUser = userAge <= getAgeCutoff();
 
-    var payload = {
-      fullName: fullNameInput.value.trim(),
-      dob: cleanDob,
-      phone: phoneInput.value.trim(),
-      email: emailInput.value.trim(),
-      district: districtSelect.value,
-      pincode: pincodeInput.value.trim(),
-      tshirtSize: isKidsUser ? "N/A" : (tshirtSelect.value || "M"),
-      tshirtSelected: !isKidsUser && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A",
-      bloodGroup: bloodGroupSelect.value,
-      gender: selectedGender,
-      emergencyContact: emergencyContactInput.value.trim()
-    };
+    // Only enabled fields are collected — a field the admin disabled via the
+    // Registration Form Builder is simply omitted; the backend already falls
+    // back to a sensible default for any field that's missing from the payload.
+    var payload = {};
+    if (isFieldEnabled('fullName')) payload.fullName = fullNameInput.value.trim();
+    if (isFieldEnabled('dob')) payload.dob = cleanDob;
+    if (isFieldEnabled('phone')) payload.phone = phoneInput.value.trim();
+    if (isFieldEnabled('email')) payload.email = emailInput.value.trim();
+    if (isFieldEnabled('district')) payload.district = districtSelect.value;
+    if (isFieldEnabled('pincode')) payload.pincode = pincodeInput.value.trim();
+    if (isFieldEnabled('tshirtSize')) {
+      var tshirtEligibleForSubmit = isTshirtEligibleForCurrentUser(isKidsUser);
+      payload.tshirtSize = tshirtEligibleForSubmit ? (tshirtSelect.value || "M") : "N/A";
+      payload.tshirtSelected = tshirtEligibleForSubmit && tshirtSelect.value !== "" && tshirtSelect.value !== "NO" && tshirtSelect.value !== "N/A";
+    }
+    if (isFieldEnabled('bloodGroup')) payload.bloodGroup = bloodGroupSelect.value;
+    if (isFieldEnabled('gender')) payload.gender = selectedGender;
+    if (isFieldEnabled('emergencyContact')) payload.emergencyContact = emergencyContactInput.value.trim();
 
     try {
       // Retry briefly on cold-start / DB connect failures so users aren't stuck
@@ -1083,14 +1521,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (registerBtn) {
-    registerBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      if (validateStep2()) {
-        handleFormSubmission();
-      }
-    });
-  }
+  // registerBtn's click handling is wired inline in buildRegistrationSteps()
+  // (its click handler calls handleFormSubmission() directly for the last step).
 
 });
 
@@ -1641,6 +2073,37 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   /* ---------------------------------------------------------
+     Registration Notice Popup — shown once per session, shortly
+     after the contact page loads, so visitors messaging about
+     event registration know upfront that registrations are
+     closed and won't get a response on that topic.
+  --------------------------------------------------------- */
+  var regNoticeOverlay = document.getElementById('cRegNoticeOverlay');
+  var regNoticeClose = document.getElementById('cRegNoticeClose');
+  var REG_NOTICE_STORAGE_KEY = 'contactRegNoticeShown';
+
+  if (regNoticeOverlay) {
+    function closeRegNotice() {
+      regNoticeOverlay.classList.remove('open');
+      try { sessionStorage.setItem(REG_NOTICE_STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
+    }
+
+    if (regNoticeClose) regNoticeClose.addEventListener('click', closeRegNotice);
+    regNoticeOverlay.addEventListener('click', function (e) {
+      if (e.target === regNoticeOverlay) closeRegNotice();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && regNoticeOverlay.classList.contains('open')) closeRegNotice();
+    });
+
+    var regNoticeAlreadyShown = false;
+    try { regNoticeAlreadyShown = !!sessionStorage.getItem(REG_NOTICE_STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
+    if (!regNoticeAlreadyShown) {
+      setTimeout(function () { regNoticeOverlay.classList.add('open'); }, 900);
+    }
+  }
+
+  /* ---------------------------------------------------------
      Security Check (math captcha) — fetched fresh on load and
      re-fetched after every failed attempt so a stale/used
      question can't be resubmitted.
@@ -1764,6 +2227,20 @@ document.addEventListener('DOMContentLoaded', function () {
   var currentCaptchaToken = null;
 
   /* ---------------------------------------------------------
+     Gender selection
+  --------------------------------------------------------- */
+  var selectedVGender = null;
+  var vGenderBoxes = document.querySelectorAll('#volunteerForm .gender-row .option-box');
+  vGenderBoxes.forEach(function (box) {
+    box.addEventListener('click', function () {
+      vGenderBoxes.forEach(function (b) { b.classList.remove('selected-gender'); });
+      box.classList.add('selected-gender');
+      selectedVGender = box.getAttribute('data-gender');
+      clearVError('vGender');
+    });
+  });
+
+  /* ---------------------------------------------------------
      Volunteer Page Open/Closed — controlled from the admin
      Settings page. Swaps the form out for a closed notice.
   --------------------------------------------------------- */
@@ -1880,7 +2357,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (wrapEl) wrapEl.classList.remove('has-error');
   }
 
-  ['vName', 'vAge', 'vPhone', 'vEmail', 'vDistrict', 'vTshirt', 'vRole', 'vCaptchaAnswer'].forEach(function (id) {
+  ['vName', 'vAge', 'vPhone', 'vEmail', 'vDistrict', 'vTshirt', 'vCaptchaAnswer'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', function () { clearVError(id); });
   });
@@ -1892,7 +2369,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var email = document.getElementById('vEmail').value.trim();
     var district = districtSelect.value;
     var tshirtSize = document.getElementById('vTshirt').value;
-    var role = document.getElementById('vRole').value;
+    var roleEl = document.getElementById('vRole');
+    var role = roleEl ? roleEl.value : '';
     var experience = document.getElementById('vExperience').value;
     var message = document.getElementById('vMessage').value.trim();
     var captchaAnswer = captchaAnswerInput ? captchaAnswerInput.value.trim() : '';
@@ -1907,7 +2385,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showVError('vEmail', 'Enter a valid email address.'); isValid = false; }
     if (!district) { showVError('vDistrict', 'Please select your district.'); isValid = false; }
     if (!tshirtSize) { showVError('vTshirt', 'Please select a T-shirt size.'); isValid = false; }
-    if (!role) { showVError('vRole', 'Please select a preferred role.'); isValid = false; }
+    if (!selectedVGender) { showVError('vGender', 'Please select your gender.'); isValid = false; }
     if (!captchaAnswer) { showVError('vCaptchaAnswer', 'Please answer the security check.'); isValid = false; }
 
     if (!isValid) return;
@@ -1921,7 +2399,7 @@ document.addEventListener('DOMContentLoaded', function () {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name, age: ageNum, phone: phone, email: email, district: district,
+          name: name, age: ageNum, gender: selectedVGender, phone: phone, email: email, district: district,
           tshirtSize: tshirtSize, role: role, experience: experience, message: message,
           captchaToken: currentCaptchaToken, captchaAnswer: captchaAnswer,
           website: website
@@ -1941,6 +2419,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
       showVolunteerModal(result.message || "Thank you for volunteering! We'll get back to you soon.", true);
       volunteerForm.reset();
+      vGenderBoxes.forEach(function (b) { b.classList.remove('selected-gender'); });
+      selectedVGender = null;
       loadCaptcha();
     } catch (err) {
       console.error("Volunteer form error:", err);

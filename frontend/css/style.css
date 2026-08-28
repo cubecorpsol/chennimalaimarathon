@@ -596,6 +596,7 @@ table { max-width: 100%; }
 .contact-body { padding: 0 0 70px; text-align: center; }
 .contact-icon { display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; margin: 0 auto 16px; border-radius: 50%; background: #e3ecfb; color: var(--blue-icon); font-size: 20px; }
 .contact-icon.green { background: #e5f3ea; color: var(--green); }
+.contact-icon.orange { background: #fef3c7; color: var(--orange-dark); }
 .contact-block h4 { font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 10px; }
 .contact-block a.email, .contact-block .email-inline { color: var(--green); font-weight: 700; font-size: 16px; }
 .contact-block a.email i { font-size: 14px; margin-right: 4px; }
@@ -662,6 +663,30 @@ table { max-width: 100%; }
 .benefit-card:hover { transform: translateY(-4px); box-shadow: 0 10px 26px rgba(0,0,0,0.08); }
 .benefit-card h4 { font-size: 17px; font-weight: 800; color: var(--navy); margin: 4px 0 8px; }
 .benefit-card p { font-size: 14px; color: var(--text-gray); line-height: 1.6; margin: 0; }
+
+/* =========================================================
+   ROUTE MAP PAGE
+========================================================= */
+.route-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 900px;
+  margin: 0 auto 40px;
+}
+.route-info-item { text-align: center; }
+.route-info-label { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--text-gray); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.route-info-value { font-size: 15px; font-weight: 700; color: var(--navy); line-height: 1.4; }
+.route-map-frame {
+  background: #fff;
+  border: 1px solid var(--border-gray);
+  border-radius: 14px;
+  box-shadow: 0 6px 30px rgba(0,0,0,0.06);
+  padding: 20px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.route-map-frame img { width: 100%; height: auto; display: block; border-radius: 6px; }
 
 /* =========================================================
    SPONSORS / SPONSORSHIP
@@ -1259,12 +1284,59 @@ table { max-width: 100%; }
   color: var(--orange); text-decoration: none; margin-top: -2px; width: fit-content;
 }
 .size-chart-link:hover { text-decoration: underline; color: var(--green); }
-.size-chart-table th { background: #f6f9f6; color: var(--navy); font-size: 13px; }
-.size-chart-table td { font-size: 13px; }
-.size-chart-warning { font-size: 12.5px; color: #d9455f; font-weight: 600; margin-top: 14px; margin-bottom: 0; }
+
+.size-chart-modal-content {
+  border: none; border-radius: 18px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(13, 31, 71, 0.32);
+}
+.size-chart-modal-header {
+  position: relative; background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%);
+  border: none; padding: 22px 56px 22px 24px; display: flex; align-items: center; gap: 14px;
+}
+.size-chart-modal-header::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--orange), var(--green));
+}
+.size-chart-modal-icon {
+  flex: none; width: 42px; height: 42px; border-radius: 50%; background: rgba(245, 166, 35, 0.18);
+  color: var(--orange); display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.size-chart-modal-header .modal-title {
+  color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.2px;
+}
+.size-chart-modal-close {
+  position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); border: none; color: #fff; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s ease;
+}
+.size-chart-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
+.size-chart-modal-content .modal-body { padding: 24px; }
+.size-chart-intro { font-size: 13.5px; color: var(--text-gray); margin-bottom: 16px; }
+.size-chart-table {
+  width: 100%; border-collapse: separate; border-spacing: 0; text-align: center;
+  border: 1px solid var(--border-gray); border-radius: 10px; overflow: hidden;
+}
+.size-chart-table th {
+  background: var(--navy); color: #fff; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.4px; padding: 10px 8px;
+}
+.size-chart-table td { font-size: 13.5px; color: var(--text-dark); padding: 9px 8px; border-top: 1px solid var(--border-gray); }
+.size-chart-table td:first-child { font-weight: 700; color: var(--navy); }
+.size-chart-table tbody tr:nth-child(even) { background: #f8fafc; }
+.size-chart-warning {
+  display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; color: #9a3412; font-weight: 600;
+  background: #fff7ed; border: 1px solid #ffedd5; border-radius: 10px; padding: 12px 14px;
+  margin-top: 16px; margin-bottom: 0;
+}
+.size-chart-warning i { margin-top: 1px; color: var(--orange-dark); }
+.size-chart-modal-content .modal-footer { border-top: 1px solid var(--border-gray); padding: 16px 24px; justify-content: center; }
+.size-chart-close-btn { max-width: 200px; padding: 12px 20px; font-size: 14px; }
 @media (max-width: 576px) {
   #sizeChartModal .modal-dialog { margin: 0.5rem; }
+  .size-chart-modal-header { padding: 18px 48px 18px 18px; }
+  .size-chart-modal-content .modal-body { padding: 18px; }
   .size-chart-table { font-size: 12px; }
+  .size-chart-table th, .size-chart-table td { padding: 8px 5px; }
 }
 
 /* Info box — "Why do we need this information?" */
@@ -1349,6 +1421,7 @@ table { max-width: 100%; }
   .contact-form-section { padding: 50px 0; }
   .volunteer-form-section { padding: 50px 0; }
   .benefits-section { padding: 0 0 50px; }
+  .route-info-grid { grid-template-columns: 1fr; gap: 20px; max-width: 360px; }
   .why-section { flex-direction: column; }
   .race-cats { flex-direction: column; align-items: center; }
   .movement-item { flex: 1 1 100%; border-right: none !important; padding-bottom: 20px; border-bottom: 1px solid var(--border-gray); }

@@ -163,9 +163,8 @@ function buildRaceLocationHtml() {
     <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #1f6d3f; padding: 14px 16px; border-radius: 8px; margin-bottom: 20px;">
       <p style="font-size: 13px; color: #0d1f47; margin: 0 0 8px 0; font-weight: 700;">📍 Race Location</p>
       <p style="font-size: 13px; color: #475569; margin: 0; line-height: 1.6;">
-        All categories start from <strong>Chennimalai Bus Stand</strong>.<br>
-        <strong>Kids:</strong> Finish at Muthayankovil<br>
-        <strong>Adults:</strong> Finish at Jaivikas School
+        Both the 7 KM and 3.5 KM (Kids) races start and finish at the same venue:<br>
+        <strong>Kongu Vellalar Matriculation Higher Secondary School, Chennimalai</strong>
       </p>
     </div>`;
 }
@@ -537,12 +536,12 @@ async function sendContactEmail(record, isDev = false) {
   try {
     const info = await smtpObj.transporter.sendMail({
       from: smtpObj.senderEmail,
-      to: "support@chennimalaimarathon.com",
+      to: "info@chennimalaimarathon.com",
       replyTo: record.email,
       subject: subject,
       html: htmlContent
     });
-    console.log(`✉️ [ZEPTOMAIL SMTP] Contact form email sent to support@chennimalaimarathon.com (messageId: ${info.messageId})`);
+    console.log(`✉️ [ZEPTOMAIL SMTP] Contact form email sent to info@chennimalaimarathon.com (messageId: ${info.messageId})`);
     return true;
   } catch (err) {
     console.error(`❌ ZEPTOMAIL_SMTP_CONTACT_EMAIL_SEND_ERROR:`, err.message);

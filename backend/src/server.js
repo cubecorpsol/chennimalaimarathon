@@ -12,7 +12,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { Mutex } = require("async-mutex");
 
-const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage, Volunteer } = require("./db");
+const { connectDB, Settings, Registration, AdminUser, Sponsorship, ContactMessage, Volunteer, RegistrationFormConfig, DEFAULT_REGISTRATION_FORM_CONFIG, TshirtSettings, DEFAULT_TSHIRT_SETTINGS } = require("./db");
 const sheets = require("./services/sheetsService");
 const emailService = require("./services/emailService");
 const payuService = require("./services/payuService");
@@ -204,6 +204,28 @@ app.get("/api/status", async (req, res) => {
     });
   } catch (err) {
     console.error("STATUS_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// Public Registration Form Config — drives register.html's step/field layout and messages.
+app.get("/api/registration-form-config", async (req, res) => {
+  try {
+    const config = await RegistrationFormConfig.findOne().lean() || DEFAULT_REGISTRATION_FORM_CONFIG;
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error("REGISTRATION_FORM_CONFIG_ERROR", err);
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// Public T-Shirt Settings — eligibility flags + size chart, consumed by register.html.
+app.get("/api/tshirt-settings", async (req, res) => {
+  try {
+    const settings = await TshirtSettings.findOne().lean() || DEFAULT_TSHIRT_SETTINGS;
+    res.json({ success: true, settings });
+  } catch (err) {
+    console.error("TSHIRT_SETTINGS_ERROR", err);
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });
@@ -1031,13 +1053,14 @@ app.post("/api/register", async (req, res) => {
       const age = parseInt(data.age || 20, 10);
       const participantType = age > (settings.ageCutoff || 13) ? "Adult" : "Kids";
       const category = participantType === "Adult" ? "7 KM Timed Run" : "3.5 KM Fun Run";
+      const tshirtEligible = await razorpayService.getTshirtEligibility(participantType);
 
       regRecord = await Registration.create({
         fullName: data.fullName || "Runner", dob: data.dob || "01/01/2000", age,
         participantType, category, gender: data.gender || "others", phone: data.phone || "",
         email: emailLower, district: data.district || "", pincode: data.pincode || "",
-        tshirtSize: participantType === "Kids" ? "N/A" : (data.tshirtSize || "M"),
-        tshirtSelected: participantType !== "Kids" && data.tshirtSelected !== false && data.tshirtSelected !== "false",
+        tshirtSize: tshirtEligible ? (data.tshirtSize || "M") : "N/A",
+        tshirtSelected: tshirtEligible && data.tshirtSelected !== false && data.tshirtSelected !== "false",
         bloodGroup: data.bloodGroup || "O+", emergencyContact: data.emergencyContact || "",
         tshirtNumber: "N/A", paymentStatus: "Pending",
         razorpayOrderId: `order_${Date.now()}`
@@ -1165,6 +1188,7 @@ app.post("/api/volunteer", async (req, res) => {
     const email = String(data.email || "").trim().toLowerCase();
     const district = String(data.district || "").trim();
     const tshirtSize = String(data.tshirtSize || "").trim();
+    const gender = String(data.gender || "").trim().toLowerCase();
     const role = String(data.role || "").trim();
     const experience = String(data.experience || "No").trim();
     const message = String(data.message || "").trim();
@@ -1177,8 +1201,11 @@ app.post("/api/volunteer", async (req, res) => {
       return res.json({ success: true, message: "Thank you for volunteering! We'll get back to you soon." });
     }
 
-    if (!name || !phone || !email || !district || !tshirtSize || !role) {
+    if (!name || !phone || !email || !district || !tshirtSize) {
       return res.status(400).json({ error: "MISSING_FIELDS", message: "Please fill in all required fields." });
+    }
+    if (!["male", "female", "others"].includes(gender)) {
+      return res.status(400).json({ error: "INVALID_GENDER", message: "Please select your gender." });
     }
     if (!age || isNaN(age) || age < 15 || age > 80) {
       return res.status(400).json({ error: "INVALID_AGE", message: "Enter a valid age between 15 and 80." });
@@ -1213,7 +1240,7 @@ app.post("/api/volunteer", async (req, res) => {
       return res.json({ success: true, message: "You've already submitted a volunteer application. We'll get back to you soon." });
     }
 
-    const volunteer = await Volunteer.create({ name, age, phone, email, district, tshirtSize, role, experience, message });
+    const volunteer = await Volunteer.create({ name, age, gender, phone, email, district, tshirtSize, role, experience, message });
 
     await settleTask(() => emailService.sendVolunteerEmail(volunteer, isDevelopment()), "VOLUNTEER_EMAIL");
 

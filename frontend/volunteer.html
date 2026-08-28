@@ -61,6 +61,7 @@
       <a href="index.html">HOME</a>
       <a href="about.html">ABOUT</a>
       <a href="prizes.html">PRIZES</a>
+      <a href="route-map.html">ROUTE MAP</a>
       <a href="sponsors.html">SPONSORS</a>
       <a href="volunteer.html" class="active">VOLUNTEER</a>
       <a href="contact.html">CONTACT</a>
@@ -174,7 +175,28 @@
           </div>
 
           <div class="form-group">
-            <label for="vRole">Preferred Volunteering Role <span class="required-star">*</span></label>
+            <span class="section-label">Gender <span class="required-star">*</span></span>
+            <div class="gender-row">
+              <div class="option-box selectable blue-line" data-gender="male" id="vGenderMale">
+                <i class="fa-solid fa-mars opt-icon"></i>
+                Male
+              </div>
+              <div class="option-box selectable pink-line" data-gender="female" id="vGenderFemale">
+                <i class="fa-solid fa-venus opt-icon"></i>
+                Female
+              </div>
+              <div class="option-box selectable purple-line" data-gender="others" id="vGenderOthers">
+                <i class="fa-solid fa-venus-mars opt-icon"></i>
+                Others
+              </div>
+            </div>
+            <div class="field-error" id="vGender-error"></div>
+          </div>
+
+          <!-- Preferred role is currently hidden; kept in the DOM (optional server-side) so it's a
+               one-line change to bring back. -->
+          <div class="form-group" id="vRole-group" style="display:none;">
+            <label for="vRole">Preferred Volunteering Role</label>
             <div class="input-wrap" id="vRole-wrap">
               <i class="fa-solid fa-people-carry-box"></i>
               <select id="vRole">
@@ -304,6 +326,7 @@
       <a href="index.html"><i class="fa-solid fa-house"></i> HOME</a>
       <a href="about.html"><i class="fa-solid fa-circle-info"></i> ABOUT</a>
       <a href="prizes.html"><i class="fa-solid fa-trophy"></i> PRIZES</a>
+      <a href="route-map.html"><i class="fa-solid fa-map-location-dot"></i> ROUTE MAP</a>
       <a href="sponsors.html"><i class="fa-solid fa-handshake"></i> SPONSORS</a>
       <a href="volunteer.html" class="active"><i class="fa-solid fa-hand-holding-heart"></i> VOLUNTEER</a>
       <a href="contact.html"><i class="fa-solid fa-envelope"></i> CONTACT</a>
