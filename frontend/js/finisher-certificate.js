@@ -2,7 +2,7 @@
    Chennimalai Marathon — Finisher Certificate Download
    Talks to the ADMIN backend's public endpoint (a separate deployment from this
    site's own registration backend), not js/marathon-api.js's BACKEND_URL.
-   Every check (email/BIB match, finished status, review hold) happens server-side —
+   Every check (mobile number/BIB match, finished status, review hold) happens server-side —
    this file only collects input, shows the right message, and saves the file the
    server sends back. Nothing about certificate generation or storage is exposed here.
    ============================================================ */
@@ -18,8 +18,8 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const locationRow = document.getElementById("certLocationStatus");
   const locationText = document.getElementById("certLocationText");
   const downloadBtn = document.getElementById("certDownloadBtn");
-  const emailInput = document.getElementById("crEmail");
-  const emailError = document.getElementById("crEmail-error");
+  const mobileInput = document.getElementById("crMobile");
+  const mobileError = document.getElementById("crMobile-error");
   const bibInput = document.getElementById("crBib");
   const bibError = document.getElementById("crBib-error");
 
@@ -113,7 +113,7 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   }
 
   function clearErrors() {
-    emailError.textContent = "";
+    mobileError.textContent = "";
     bibError.textContent = "";
   }
 
@@ -132,11 +132,13 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
 
   async function submitDownload() {
     clearErrors();
-    const email = (emailInput.value || "").trim();
+    const mobileNumber = (mobileInput.value || "").trim();
     const bibNumber = (bibInput.value || "").trim();
     let hasError = false;
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailError.textContent = "Enter a valid email address.";
+    // Accepts a bare 10-digit number or one with a +91/0 prefix, spaces, or dashes — the server
+    // normalizes to the last 10 digits the same way, so this is just a friendly early check.
+    if (!mobileNumber || mobileNumber.replace(/\D/g, "").slice(-10).length !== 10) {
+      mobileError.textContent = "Enter a valid 10-digit mobile number.";
       hasError = true;
     }
     if (!bibNumber) {
@@ -156,7 +158,7 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
+          mobileNumber,
           bibNumber,
           lat: coords?.lat,
           lng: coords?.lng,

@@ -18,7 +18,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.5.1/css/all.css">
-<meta name="description" content="Race day check-in for Chennimalai Marathon 2026 — confirm your presence at the venue with your email and BIB number.">
+<meta name="description" content="Race day check-in for Chennimalai Marathon 2026 — confirm your presence at the venue with your mobile number and BIB number.">
 <meta name="robots" content="noindex, nofollow">
 <link rel="canonical" href="https://www.chennimalaimarathon.com/checkin.html">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,7 +68,7 @@
   <div class="inner-hero-content">
     <div class="center-divider"><span class="line orange"></span><i class="fa-solid fa-person-running"></i><span class="line green"></span></div>
     <h2>RACE DAY CHECK-IN</h2>
-    <p class="lead" style="margin:0 auto;">Confirm you're at the venue with your email and BIB number. You must allow location access — check-in only works within range of the venue.</p>
+    <p class="lead" style="margin:0 auto;">Confirm you're at the venue with your mobile number and BIB number. You must allow location access — check-in only works within range of the venue.</p>
   </div>
 </section>
 
@@ -87,12 +87,12 @@
 
         <form id="checkinForm" autocomplete="off">
           <div class="form-group">
-            <label for="ciEmail">Email Address <span class="required-star">*</span></label>
-            <div class="input-wrap" id="ciEmail-wrap">
-              <i class="fa-regular fa-envelope"></i>
-              <input type="email" id="ciEmail" placeholder="The email you registered with">
+            <label for="ciMobile">Mobile Number <span class="required-star">*</span></label>
+            <div class="input-wrap" id="ciMobile-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="ciMobile" placeholder="Your registered mobile number" inputmode="numeric">
             </div>
-            <div class="field-error" id="ciEmail-error"></div>
+            <div class="field-error" id="ciMobile-error"></div>
           </div>
 
           <div class="form-group">

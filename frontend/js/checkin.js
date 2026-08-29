@@ -10,8 +10,8 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const locationRow = document.getElementById("checkinLocationStatus");
   const locationText = document.getElementById("checkinLocationText");
   const submitBtn = document.getElementById("checkinSubmitBtn");
-  const emailInput = document.getElementById("ciEmail");
-  const emailError = document.getElementById("ciEmail-error");
+  const mobileInput = document.getElementById("ciMobile");
+  const mobileError = document.getElementById("ciMobile-error");
   const bibInput = document.getElementById("ciBib");
   const bibError = document.getElementById("ciBib-error");
 
@@ -76,17 +76,19 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   }
 
   function clearErrors() {
-    emailError.textContent = "";
+    mobileError.textContent = "";
     bibError.textContent = "";
   }
 
   async function submitCheckin() {
     clearErrors();
-    const email = (emailInput.value || "").trim();
+    const mobileNumber = (mobileInput.value || "").trim();
     const bibNumber = (bibInput.value || "").trim();
     let hasError = false;
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailError.textContent = "Enter a valid email address.";
+    // Accepts a bare 10-digit number or one with a +91/0 prefix, spaces, or dashes — the server
+    // normalizes to the last 10 digits the same way, so this is just a friendly early check.
+    if (!mobileNumber || mobileNumber.replace(/\D/g, "").slice(-10).length !== 10) {
+      mobileError.textContent = "Enter a valid 10-digit mobile number.";
       hasError = true;
     }
     if (!bibNumber) {
@@ -110,7 +112,7 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
       const res = await fetch(`${ADMIN_API_BASE}/api/public/checkin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, bibNumber, lat: coords.lat, lng: coords.lng, accuracy: coords.accuracy })
+        body: JSON.stringify({ mobileNumber, bibNumber, lat: coords.lat, lng: coords.lng, accuracy: coords.accuracy })
       });
       const data = await res.json();
       if (res.ok && data.success) {
