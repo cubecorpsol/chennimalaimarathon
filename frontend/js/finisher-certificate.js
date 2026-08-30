@@ -15,8 +15,6 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const closedText = document.getElementById("certClosedText");
   const availableBlock = document.getElementById("certAvailableBlock");
 
-  const locationRow = document.getElementById("certLocationStatus");
-  const locationText = document.getElementById("certLocationText");
   const downloadBtn = document.getElementById("certDownloadBtn");
   const mobileInput = document.getElementById("crMobile");
   const mobileError = document.getElementById("crMobile-error");
@@ -27,11 +25,6 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const modalIcon = document.getElementById("crAlertModalIcon");
   const modalMessage = document.getElementById("crAlertModalMessage");
   const modalClose = document.getElementById("crAlertModalClose");
-
-  // Best-effort only — logged alongside the download for the admin's records, but a runner who
-  // denies (or whose browser lacks) location support can still download their own certificate.
-  let coords = null; // { lat, lng, accuracy }
-  let locationStatus = "Unavailable";
 
   function showModal(ok, message) {
     modalIcon.classList.toggle("success", !!ok);
@@ -56,7 +49,6 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
     checkingBlock.style.display = "none";
     closedBlock.style.display = "none";
     availableBlock.style.display = "block";
-    requestLocation();
   }
 
   // Checks with the admin backend whether downloads are turned on before ever showing the form —
@@ -78,38 +70,6 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
     } catch {
       showClosed("Couldn't check certificate download availability — please try again shortly.");
     }
-  }
-
-  function setLocationRow(state, text) {
-    locationRow.classList.remove("ok", "err");
-    if (state === "ok") locationRow.classList.add("ok");
-    if (state === "err") locationRow.classList.add("err");
-    locationText.textContent = text;
-  }
-
-  function requestLocation() {
-    if (!("geolocation" in navigator)) {
-      locationStatus = "Unavailable";
-      setLocationRow("err", "Location isn't available in this browser — you can still download your certificate.");
-      return;
-    }
-    setLocationRow("", "Requesting your location…");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        coords = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        };
-        locationStatus = "Granted";
-        setLocationRow("ok", "Location captured for your download record.");
-      },
-      () => {
-        locationStatus = "Denied";
-        setLocationRow("err", "Location permission denied — you can still download your certificate.");
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
   }
 
   function clearErrors() {
@@ -157,14 +117,7 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
       const res = await fetch(`${ADMIN_API_BASE}/api/public/certificate-download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mobileNumber,
-          bibNumber,
-          lat: coords?.lat,
-          lng: coords?.lng,
-          accuracy: coords?.accuracy,
-          locationStatus
-        })
+        body: JSON.stringify({ mobileNumber, bibNumber })
       });
 
       const contentType = res.headers.get("Content-Type") || "";

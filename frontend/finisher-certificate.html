@@ -33,8 +33,6 @@
     background: var(--light-gray); border: 1px solid var(--border-gray); border-radius: 8px;
     padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: var(--text-gray);
   }
-  .checkin-status-row.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-  .checkin-status-row.err { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
   .checkin-status-row i { font-size: 15px; flex-shrink: 0; }
   #certDownloadBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
@@ -80,7 +78,7 @@
         <h2 class="form-title">GET MY CERTIFICATE</h2>
         <div class="form-title-underline"></div>
         <p style="font-size: 13px; color: var(--text-gray); margin: -8px 0 16px; line-height: 1.6;">
-          Includes your official certificate plus a one-page summary of your splits and pace, in a single PDF.
+          Downloads your official participant certificate as a PDF.
         </p>
 
         <div id="certCheckingBlock" class="checkin-status-row">
@@ -94,11 +92,6 @@
         </div>
 
         <div id="certAvailableBlock" style="display:none;">
-          <div id="certLocationStatus" class="checkin-status-row">
-            <i class="fa-solid fa-location-crosshairs"></i>
-            <span id="certLocationText">Requesting your location…</span>
-          </div>
-
           <form id="certDownloadForm" autocomplete="off">
             <div class="form-group">
               <label for="crMobile">Mobile Number <span class="required-star">*</span></label>
