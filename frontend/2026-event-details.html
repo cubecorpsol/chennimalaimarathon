@@ -18,7 +18,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.5.1/css/all.css">
-<meta name="description" content="Everything for Chennimalai Marathon 2026 race day — join the community, view the route map, and request your finisher certificate.">
+<meta name="description" content="Everything for Chennimalai Marathon 2026 race day — join the community, view the route map, download your participant certificate, and share your feedback.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://www.chennimalaimarathon.com/2026-event-details.html">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,7 +41,7 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   /* Page-local additions only — everything else reuses css/style.css as-is. */
-  .quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1000px; margin: 0 auto; padding: 60px 40px; }
+  .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; max-width: 1280px; margin: 0 auto; padding: 60px 40px; }
   @media (max-width: 900px) { .quick-actions { grid-template-columns: 1fr; padding: 40px 24px; } }
   .quick-action-card {
     background: #fff; border: 1px solid var(--border-gray); border-radius: 14px; padding: 32px 24px;
@@ -119,9 +119,15 @@
   </div>
   <div class="quick-action-card">
     <div class="quick-action-icon" style="background:var(--orange);"><i class="fa-solid fa-award"></i></div>
-    <h3>Finisher Certificate</h3>
+    <h3>Participant Certificate</h3>
     <p>Already crossed the finish line? Download your official e-certificate now.</p>
     <a href="finisher-certificate.html" class="qa-btn"><i class="fa-solid fa-download"></i> Download My Certificate</a>
+  </div>
+  <div class="quick-action-card">
+    <div class="quick-action-icon" style="background:#f59e0b;"><i class="fa-solid fa-star"></i></div>
+    <h3>Rate Your Experience</h3>
+    <p>Tell us how race day went — a quick star rating and comment helps us improve next year.</p>
+    <a href="feedback.html" class="qa-btn"><i class="fa-solid fa-star"></i> Share Feedback</a>
   </div>
 </section>
 

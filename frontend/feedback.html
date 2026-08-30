@@ -13,14 +13,14 @@
 
   gtag('config', 'G-4ZLYFWKYYZ');
 </script>
-<title>Download Participant Certificate | Chennimalai Marathon 2026</title>
+<title>Share Your Feedback | Chennimalai Marathon 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://use.fontawesome.com/releases/v6.5.1/css/all.css">
-<meta name="description" content="Download your official Chennimalai Marathon 2026 participant certificate — enter your mobile number and BIB number.">
+<meta name="description" content="Tell us about your Chennimalai Marathon 2026 race-day experience — rate us and leave a comment.">
 <meta name="robots" content="noindex, nofollow">
-<link rel="canonical" href="https://www.chennimalaimarathon.com/finisher-certificate.html">
+<link rel="canonical" href="https://www.chennimalaimarathon.com/feedback.html">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
 <link rel="icon" type="image/jpeg" href="images/logo.webp">
@@ -28,15 +28,18 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   /* Page-local additions only — everything else reuses css/style.css as-is. */
-  .checkin-status-row {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--light-gray); border: 1px solid var(--border-gray); border-radius: 8px;
-    padding: 12px 14px; margin-bottom: 18px; font-size: 13px; color: var(--text-gray);
+  .star-rating { display: flex; justify-content: center; gap: 8px; margin: 6px 0 4px; }
+  .star-rating button {
+    background: none; border: none; padding: 0; cursor: pointer; font-size: 34px; line-height: 1;
+    color: #d1d5db; transition: color .15s ease, transform .1s ease;
   }
-  .checkin-status-row.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-  .checkin-status-row.err { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
-  .checkin-status-row i { font-size: 15px; flex-shrink: 0; }
-  #certDownloadBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .star-rating button:hover { transform: scale(1.1); }
+  .star-rating button.filled { color: #f59e0b; }
+  .rating-label { text-align: center; font-size: 12px; color: var(--text-gray); min-height: 16px; margin-bottom: 14px; }
+  #fbComment { resize: vertical; min-height: 90px; }
+  .char-counter { text-align: right; font-size: 11px; color: var(--text-gray); margin-top: 4px; }
+  .char-counter.warn { color: #dc2626; }
+  #fbSubmitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -66,74 +69,81 @@
 <!-- ===================== HERO ===================== -->
 <section class="inner-hero hero-centered" style="min-height:260px; background-color:var(--navy-dark);">
   <div class="inner-hero-content">
-    <div class="center-divider"><span class="line orange"></span><i class="fa-solid fa-award"></i><span class="line green"></span></div>
-    <h2>DOWNLOAD YOUR CERTIFICATE</h2>
-    <p class="lead" style="margin:0 auto;">Enter the mobile number and BIB number you registered with. Your certificate downloads straight to your device — available once you've crossed the finish line.</p>
+    <div class="center-divider"><span class="line orange"></span><i class="fa-solid fa-star"></i><span class="line green"></span></div>
+    <h2>SHARE YOUR FEEDBACK</h2>
+    <p class="lead" style="margin:0 auto;">Tell us how race day went — it takes under a minute and genuinely helps us improve.</p>
   </div>
 </section>
 
-<!-- ===================== DOWNLOAD FORM ===================== -->
+<!-- ===================== FEEDBACK FORM ===================== -->
 <section class="contact-form-section">
   <div class="register-inner">
     <div class="register-form-panel">
       <div class="register-card">
-        <h2 class="form-title">GET MY CERTIFICATE</h2>
+        <h2 class="form-title">RATE YOUR EXPERIENCE</h2>
         <div class="form-title-underline"></div>
-        <p style="font-size: 13px; color: var(--text-gray); margin: -8px 0 16px; line-height: 1.6;">
-          Includes your official certificate plus a one-page summary of your splits and pace, in a single PDF.
-        </p>
 
-        <div id="certCheckingBlock" class="checkin-status-row">
-          <i class="fa-solid fa-spinner fa-spin"></i>
-          <span>Checking certificate availability…</span>
-        </div>
+        <form id="feedbackForm" autocomplete="off">
+          <div class="star-rating" id="fbStars">
+            <button type="button" data-value="1" aria-label="1 star"><i class="fa-solid fa-star"></i></button>
+            <button type="button" data-value="2" aria-label="2 stars"><i class="fa-solid fa-star"></i></button>
+            <button type="button" data-value="3" aria-label="3 stars"><i class="fa-solid fa-star"></i></button>
+            <button type="button" data-value="4" aria-label="4 stars"><i class="fa-solid fa-star"></i></button>
+            <button type="button" data-value="5" aria-label="5 stars"><i class="fa-solid fa-star"></i></button>
+          </div>
+          <div class="rating-label" id="fbRatingLabel">Tap a star to rate</div>
 
-        <div id="certClosedBlock" class="checkin-status-row" style="display:none;">
-          <i class="fa-solid fa-lock"></i>
-          <span id="certClosedText"></span>
-        </div>
-
-        <div id="certAvailableBlock" style="display:none;">
-          <div id="certLocationStatus" class="checkin-status-row">
-            <i class="fa-solid fa-location-crosshairs"></i>
-            <span id="certLocationText">Requesting your location…</span>
+          <div class="form-group">
+            <label for="fbEmail">Email Address</label>
+            <div class="input-wrap" id="fbEmail-wrap">
+              <i class="fa-solid fa-envelope"></i>
+              <input type="email" id="fbEmail" placeholder="Your registered email">
+            </div>
           </div>
 
-          <form id="certDownloadForm" autocomplete="off">
-            <div class="form-group">
-              <label for="crMobile">Mobile Number <span class="required-star">*</span></label>
-              <div class="input-wrap" id="crMobile-wrap">
-                <i class="fa-solid fa-phone"></i>
-                <input type="tel" id="crMobile" placeholder="Your registered mobile number" inputmode="numeric">
-              </div>
-              <div class="field-error" id="crMobile-error"></div>
+          <div class="form-group">
+            <label for="fbMobile">Mobile Number <span class="required-star">*</span></label>
+            <div class="input-wrap" id="fbMobile-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="fbMobile" placeholder="Your registered mobile number" inputmode="numeric">
             </div>
+            <div class="field-error" id="fbMobile-error"></div>
+          </div>
 
-            <div class="form-group">
-              <label for="crBib">BIB Number <span class="required-star">*</span></label>
-              <div class="input-wrap" id="crBib-wrap">
-                <i class="fa-solid fa-hashtag"></i>
-                <input type="text" id="crBib" placeholder="e.g. 0011" inputmode="numeric">
-              </div>
-              <div class="field-error" id="crBib-error"></div>
+          <div class="form-group">
+            <label for="fbBib">BIB Number <span class="required-star">*</span></label>
+            <div class="input-wrap" id="fbBib-wrap">
+              <i class="fa-solid fa-hashtag"></i>
+              <input type="text" id="fbBib" placeholder="e.g. 0011" inputmode="numeric">
             </div>
+            <div class="field-error" id="fbBib-error"></div>
+          </div>
 
-            <button type="button" class="btn-continue" id="certDownloadBtn">
-              <i class="fa-solid fa-download"></i> DOWNLOAD CERTIFICATE
-            </button>
-          </form>
-        </div>
+          <div class="form-group">
+            <label for="fbComment">Comment (optional)</label>
+            <div class="input-wrap" style="align-items: flex-start;">
+              <i class="fa-solid fa-comment" style="margin-top: 14px;"></i>
+              <textarea id="fbComment" maxlength="100" placeholder="What could we do better next year?"></textarea>
+            </div>
+            <div class="char-counter" id="fbCharCounter">100 characters left</div>
+          </div>
+          <div class="field-error" id="fbRating-error"></div>
+
+          <button type="button" class="btn-continue" id="fbSubmitBtn">
+            <i class="fa-solid fa-paper-plane"></i> SUBMIT FEEDBACK
+          </button>
+        </form>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ===================== RESULT MODAL ===================== -->
-<div class="alert-modal-overlay" id="crAlertModalOverlay">
-  <div class="alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="crAlertModalMessage">
-    <span class="alert-modal-icon" id="crAlertModalIcon"><i class="fa-solid fa-circle-check"></i></span>
-    <div class="alert-modal-message" id="crAlertModalMessage"></div>
-    <button type="button" class="alert-modal-btn" id="crAlertModalClose">OK</button>
+<div class="alert-modal-overlay" id="fbAlertModalOverlay">
+  <div class="alert-modal" role="alertdialog" aria-modal="true" aria-labelledby="fbAlertModalMessage">
+    <span class="alert-modal-icon" id="fbAlertModalIcon"><i class="fa-solid fa-circle-check"></i></span>
+    <div class="alert-modal-message" id="fbAlertModalMessage"></div>
+    <button type="button" class="alert-modal-btn" id="fbAlertModalClose">OK</button>
   </div>
 </div>
 
@@ -174,6 +184,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
 <script src="js/script.js" defer></script>
-<script src="js/finisher-certificate.js" defer></script>
+<script src="js/feedback.js" defer></script>
 </body>
 </html>
