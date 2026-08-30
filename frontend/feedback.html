@@ -28,18 +28,29 @@
 <link rel="stylesheet" href="css/style.css">
 <style>
   /* Page-local additions only — everything else reuses css/style.css as-is. */
-  .star-rating { display: flex; justify-content: center; gap: 8px; margin: 6px 0 4px; }
+  .category-rating-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border-gray);
+  }
+  .category-rating-row:last-child { border-bottom: none; }
+  .category-rating-name { font-size: 13.5px; font-weight: 700; color: var(--navy); }
+  .star-rating { display: flex; gap: 4px; flex-shrink: 0; }
   .star-rating button {
-    background: none; border: none; padding: 0; cursor: pointer; font-size: 34px; line-height: 1;
+    background: none; border: none; padding: 0; cursor: pointer; font-size: 24px; line-height: 1;
     color: #d1d5db; transition: color .15s ease, transform .1s ease;
   }
   .star-rating button:hover { transform: scale(1.1); }
   .star-rating button.filled { color: #f59e0b; }
-  .rating-label { text-align: center; font-size: 12px; color: var(--text-gray); min-height: 16px; margin-bottom: 14px; }
+  #fbCategoryRatings { margin-bottom: 4px; }
+  #fbCategoriesLoading { text-align: center; padding: 20px 0; color: var(--text-gray); font-size: 13px; }
   #fbComment { resize: vertical; min-height: 90px; }
   .char-counter { text-align: right; font-size: 11px; color: var(--text-gray); margin-top: 4px; }
   .char-counter.warn { color: #dc2626; }
   #fbSubmitBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+  #fbThankYou { text-align: center; padding: 20px 0; }
+  #fbThankYou .thankyou-icon { font-size: 48px; color: var(--green); margin-bottom: 16px; }
+  #fbThankYou h3 { font-family: var(--font-display); font-size: 20px; color: var(--navy); margin-bottom: 8px; }
+  #fbThankYou p { font-size: 14px; color: var(--text-gray); line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -80,59 +91,61 @@
   <div class="register-inner">
     <div class="register-form-panel">
       <div class="register-card">
-        <h2 class="form-title">RATE YOUR EXPERIENCE</h2>
-        <div class="form-title-underline"></div>
+        <div id="fbFormWrap">
+          <h2 class="form-title">RATE YOUR EXPERIENCE</h2>
+          <div class="form-title-underline"></div>
 
-        <form id="feedbackForm" autocomplete="off">
-          <div class="star-rating" id="fbStars">
-            <button type="button" data-value="1" aria-label="1 star"><i class="fa-solid fa-star"></i></button>
-            <button type="button" data-value="2" aria-label="2 stars"><i class="fa-solid fa-star"></i></button>
-            <button type="button" data-value="3" aria-label="3 stars"><i class="fa-solid fa-star"></i></button>
-            <button type="button" data-value="4" aria-label="4 stars"><i class="fa-solid fa-star"></i></button>
-            <button type="button" data-value="5" aria-label="5 stars"><i class="fa-solid fa-star"></i></button>
-          </div>
-          <div class="rating-label" id="fbRatingLabel">Tap a star to rate</div>
+          <form id="feedbackForm" autocomplete="off">
+            <div id="fbCategoriesLoading"><i class="fa-solid fa-spinner fa-spin"></i> Loading rating categories…</div>
+            <div class="form-group" id="fbCategoryRatings" style="display:none;"></div>
+            <div class="field-error" id="fbRating-error"></div>
 
-          <div class="form-group">
-            <label for="fbEmail">Email Address</label>
-            <div class="input-wrap" id="fbEmail-wrap">
-              <i class="fa-solid fa-envelope"></i>
-              <input type="email" id="fbEmail" placeholder="Your registered email">
+            <div class="form-group">
+              <label for="fbEmail">Email Address</label>
+              <div class="input-wrap" id="fbEmail-wrap">
+                <i class="fa-solid fa-envelope"></i>
+                <input type="email" id="fbEmail" placeholder="Your registered email">
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="fbMobile">Mobile Number <span class="required-star">*</span></label>
-            <div class="input-wrap" id="fbMobile-wrap">
-              <i class="fa-solid fa-phone"></i>
-              <input type="tel" id="fbMobile" placeholder="Your registered mobile number" inputmode="numeric">
+            <div class="form-group">
+              <label for="fbMobile">Mobile Number <span class="required-star">*</span></label>
+              <div class="input-wrap" id="fbMobile-wrap">
+                <i class="fa-solid fa-phone"></i>
+                <input type="tel" id="fbMobile" placeholder="Your registered mobile number" inputmode="numeric">
+              </div>
+              <div class="field-error" id="fbMobile-error"></div>
             </div>
-            <div class="field-error" id="fbMobile-error"></div>
-          </div>
 
-          <div class="form-group">
-            <label for="fbBib">BIB Number <span class="required-star">*</span></label>
-            <div class="input-wrap" id="fbBib-wrap">
-              <i class="fa-solid fa-hashtag"></i>
-              <input type="text" id="fbBib" placeholder="e.g. 0011" inputmode="numeric">
+            <div class="form-group">
+              <label for="fbBib">BIB Number <span class="required-star">*</span></label>
+              <div class="input-wrap" id="fbBib-wrap">
+                <i class="fa-solid fa-hashtag"></i>
+                <input type="text" id="fbBib" placeholder="e.g. 0011" inputmode="numeric">
+              </div>
+              <div class="field-error" id="fbBib-error"></div>
             </div>
-            <div class="field-error" id="fbBib-error"></div>
-          </div>
 
-          <div class="form-group">
-            <label for="fbComment">Comment (optional)</label>
-            <div class="input-wrap" style="align-items: flex-start;">
-              <i class="fa-solid fa-comment" style="margin-top: 14px;"></i>
-              <textarea id="fbComment" maxlength="100" placeholder="What could we do better next year?"></textarea>
+            <div class="form-group">
+              <label for="fbComment">Comment (optional)</label>
+              <div class="input-wrap" style="align-items: flex-start;">
+                <i class="fa-solid fa-comment" style="margin-top: 14px;"></i>
+                <textarea id="fbComment" maxlength="100" placeholder="What could we do better next year?"></textarea>
+              </div>
+              <div class="char-counter" id="fbCharCounter">100 characters left</div>
             </div>
-            <div class="char-counter" id="fbCharCounter">100 characters left</div>
-          </div>
-          <div class="field-error" id="fbRating-error"></div>
 
-          <button type="button" class="btn-continue" id="fbSubmitBtn">
-            <i class="fa-solid fa-paper-plane"></i> SUBMIT FEEDBACK
-          </button>
-        </form>
+            <button type="button" class="btn-continue" id="fbSubmitBtn">
+              <i class="fa-solid fa-paper-plane"></i> SUBMIT FEEDBACK
+            </button>
+          </form>
+        </div>
+
+        <div id="fbThankYou" style="display:none;">
+          <div class="thankyou-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <h3>Thank you for your feedback!</h3>
+          <p>We really appreciate you taking the time to help us improve for next year.</p>
+        </div>
       </div>
     </div>
   </div>

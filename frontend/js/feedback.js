@@ -1,17 +1,19 @@
 /* ============================================================
-   Chennimalai Marathon — Post-Race Feedback
-   Talks to the ADMIN backend's public endpoint (a separate deployment from this
+   Chennimalai Marathon — Post-Race Feedback (multi-category)
+   Talks to the ADMIN backend's public endpoints (a separate deployment from this
    site's own registration backend), not js/marathon-api.js's BACKEND_URL.
    Identity (BIB + mobile number) is verified server-side the same way the finisher
    certificate page does it — this file only collects input, shows the right message,
    and prefills from the query string when arriving from the certificate email.
+   Categories are fetched from the admin-editable list, not hardcoded here, so adding/
+   renaming/reordering a category on the admin Reviews page needs no changes to this file.
    ============================================================ */
 
 const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
 
 (function () {
-  const stars = Array.from(document.querySelectorAll("#fbStars button"));
-  const ratingLabel = document.getElementById("fbRatingLabel");
+  const categoriesLoading = document.getElementById("fbCategoriesLoading");
+  const categoriesWrap = document.getElementById("fbCategoryRatings");
   const ratingError = document.getElementById("fbRating-error");
   const emailInput = document.getElementById("fbEmail");
   const mobileInput = document.getElementById("fbMobile");
@@ -21,6 +23,8 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const commentInput = document.getElementById("fbComment");
   const charCounter = document.getElementById("fbCharCounter");
   const submitBtn = document.getElementById("fbSubmitBtn");
+  const formWrap = document.getElementById("fbFormWrap");
+  const thankYouPanel = document.getElementById("fbThankYou");
 
   const modalOverlay = document.getElementById("fbAlertModalOverlay");
   const modalIcon = document.getElementById("fbAlertModalIcon");
@@ -28,37 +32,79 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   const modalClose = document.getElementById("fbAlertModalClose");
 
   const RATING_LABELS = { 1: "Needs Improvement", 2: "Below Average", 3: "Average", 4: "Good", 5: "Excellent" };
-  let selectedRating = 0;
+  // categoryName -> selected rating (1-5), populated once categories load.
+  const selectedRatings = {};
+  let categories = [];
 
-  function showModal(ok, message) {
-    modalIcon.classList.toggle("success", !!ok);
-    modalIcon.innerHTML = ok
-      ? '<i class="fa-solid fa-circle-check"></i>'
-      : '<i class="fa-solid fa-circle-exclamation"></i>';
+  function showErrorModal(message) {
+    modalIcon.classList.remove("success");
+    modalIcon.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
     modalMessage.textContent = message;
     modalOverlay.classList.add("open");
   }
   modalClose?.addEventListener("click", () => modalOverlay.classList.remove("open"));
 
-  function paintStars(value) {
-    stars.forEach(btn => {
-      const v = Number(btn.dataset.value);
-      btn.classList.toggle("filled", v <= value);
+  function paintStars(row, value) {
+    row.querySelectorAll("button").forEach(btn => {
+      btn.classList.toggle("filled", Number(btn.dataset.value) <= value);
     });
-    ratingLabel.textContent = value ? RATING_LABELS[value] : "Tap a star to rate";
+    const label = row.parentElement.querySelector(".category-rating-label");
+    if (label) label.textContent = value ? RATING_LABELS[value] : "";
   }
 
-  function selectRating(value) {
-    selectedRating = value;
-    paintStars(value);
-    ratingError.textContent = "";
+  function renderCategories(prefillRating) {
+    categoriesWrap.innerHTML = "";
+    categories.forEach(name => {
+      if (prefillRating) selectedRatings[name] = prefillRating;
+
+      const row = document.createElement("div");
+      row.className = "category-rating-row";
+
+      const nameEl = document.createElement("div");
+      nameEl.className = "category-rating-name";
+      nameEl.textContent = name;
+
+      const starsEl = document.createElement("div");
+      starsEl.className = "star-rating";
+      for (let n = 1; n <= 5; n++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.value = String(n);
+        btn.setAttribute("aria-label", `${n} star${n === 1 ? "" : "s"} for ${name}`);
+        btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+        btn.addEventListener("click", () => {
+          selectedRatings[name] = n;
+          paintStars(starsEl, n);
+          ratingError.textContent = "";
+        });
+        starsEl.appendChild(btn);
+      }
+      if (prefillRating) paintStars(starsEl, prefillRating);
+
+      row.appendChild(nameEl);
+      row.appendChild(starsEl);
+      categoriesWrap.appendChild(row);
+    });
+    categoriesLoading.style.display = "none";
+    categoriesWrap.style.display = "block";
   }
 
-  stars.forEach(btn => {
-    btn.addEventListener("click", () => selectRating(Number(btn.dataset.value)));
-    btn.addEventListener("mouseenter", () => paintStars(Number(btn.dataset.value)));
-  });
-  document.getElementById("fbStars").addEventListener("mouseleave", () => paintStars(selectedRating));
+  async function loadCategories() {
+    const params = new URLSearchParams(window.location.search);
+    const prefillRating = parseInt(params.get("rating"), 10);
+    try {
+      const res = await fetch(`${ADMIN_API_BASE}/api/public/feedback-categories`);
+      const data = await res.json();
+      if (res.ok && data.success && data.categories.length > 0) {
+        categories = data.categories;
+        renderCategories(prefillRating >= 1 && prefillRating <= 5 ? prefillRating : null);
+      } else {
+        categoriesLoading.innerHTML = "Feedback categories aren't available right now — please try again later.";
+      }
+    } catch {
+      categoriesLoading.innerHTML = "Couldn't load rating categories. Please check your connection and reload.";
+    }
+  }
 
   function updateCharCounter() {
     const remaining = 100 - commentInput.value.length;
@@ -67,14 +113,11 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
   }
   commentInput.addEventListener("input", updateCharCounter);
 
-  // Prefill from the certificate email's link — ?email=...&bib=...&mobile=...&rating=...
-  function prefillFromQuery() {
+  function prefillContactFromQuery() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("email")) emailInput.value = params.get("email");
     if (params.get("mobile")) mobileInput.value = params.get("mobile");
     if (params.get("bib")) bibInput.value = params.get("bib");
-    const rating = parseInt(params.get("rating"), 10);
-    if (rating >= 1 && rating <= 5) selectRating(rating);
   }
 
   function clearErrors() {
@@ -97,8 +140,9 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
     const comment = (commentInput.value || "").trim().slice(0, 100);
     let hasError = false;
 
-    if (!selectedRating) {
-      ratingError.textContent = "Please pick a star rating.";
+    const missing = categories.filter(name => !selectedRatings[name]);
+    if (missing.length > 0) {
+      ratingError.textContent = "Please rate every category before submitting.";
       hasError = true;
     }
     if (!mobileNumber || mobileNumber.replace(/\D/g, "").slice(-10).length !== 10) {
@@ -111,21 +155,26 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
     }
     if (hasError) return;
 
+    const ratings = categories.map(name => ({ category: name, rating: selectedRatings[name] }));
+
     setButtonBusy(true);
     try {
       const res = await fetch(`${ADMIN_API_BASE}/api/public/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber, bibNumber, rating: selectedRating, comment })
+        body: JSON.stringify({ mobileNumber, bibNumber, ratings, comment })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
-        showModal(true, "Thank you! Your feedback has been submitted.");
+        // Swap the form out for a clean confirmation panel — showing a success popup while the
+        // filled-in form just sat there unchanged was the actual bug being fixed here.
+        formWrap.style.display = "none";
+        thankYouPanel.style.display = "block";
       } else {
-        showModal(false, data.message || "Couldn't submit your feedback. Please try again.");
+        showErrorModal(data.message || "Couldn't submit your feedback. Please try again.");
       }
     } catch {
-      showModal(false, "Couldn't reach the feedback service. Check your connection and try again.");
+      showErrorModal("Couldn't reach the feedback service. Check your connection and try again.");
     } finally {
       setButtonBusy(false);
     }
@@ -133,5 +182,6 @@ const ADMIN_API_BASE = "https://admin.chennimalaimarathon.com";
 
   submitBtn?.addEventListener("click", submitFeedback);
   updateCharCounter();
-  prefillFromQuery();
+  prefillContactFromQuery();
+  loadCategories();
 })();
