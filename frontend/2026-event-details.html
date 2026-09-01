@@ -65,6 +65,10 @@
     display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; transition: all .2s ease;
   }
   .qa-btn:hover { background: var(--navy); color: #fff; }
+  .qa-featured { border-color: #fecaca; box-shadow: 0 8px 30px rgba(220,38,38,0.12); }
+  .qa-photo-credit { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border-gray); width: 100%; justify-content: center; }
+  .qa-photo-credit span { font-size: 11px; color: var(--text-gray); font-weight: 600; }
+  .qa-photo-credit img { height: 24px; width: auto; display: block; }
 </style>
 </head>
 <body>
@@ -83,8 +87,7 @@
       <a href="about.html">ABOUT</a>
       <a href="prizes.html">PRIZES</a>
       <a href="route-map.html">ROUTE MAP</a>
-      <a href="sponsors.html">SPONSORS</a>
-      <a href="volunteer.html">VOLUNTEER</a>
+      <a href="2026-event-details.html" class="active">EVENT DETAILS</a>
       <a href="contact.html">CONTACT</a>
       <a href="faq.html">FAQ</a>
     </nav>
@@ -102,6 +105,18 @@
 
 <!-- ===================== QUICK ACTIONS ===================== -->
 <section class="quick-actions">
+  <div class="quick-action-card qa-featured">
+    <div class="quick-action-icon" style="background:#dc2626;"><i class="fa-solid fa-camera-retro"></i></div>
+    <h3>Race Day Photos Are Live!</h3>
+    <p>Finally, the wait is over — find and download your official race day photos, free.</p>
+    <a href="https://site.fotoowl.ai/surekaphotography/gallery/351079?share_key=445503" target="_blank" rel="noopener noreferrer" class="qa-btn"><i class="fa-solid fa-images"></i> View My Photos</a>
+    <div class="qa-photo-credit">
+      <span>Captured by</span>
+      <a href="https://surekaphotography.in" target="_blank" rel="noopener noreferrer">
+        <img src="images/sureka-photography-logo.png" alt="Sureka Photography">
+      </a>
+    </div>
+  </div>
   <div class="quick-action-card">
     <div class="quick-action-icon"><i class="fa-solid fa-people-group"></i></div>
     <h3>Join Our Community</h3>
@@ -145,8 +160,7 @@
       <a href="about.html"><i class="fa-solid fa-circle-info"></i> ABOUT</a>
       <a href="prizes.html"><i class="fa-solid fa-trophy"></i> PRIZES</a>
       <a href="route-map.html"><i class="fa-solid fa-map-location-dot"></i> ROUTE MAP</a>
-      <a href="sponsors.html"><i class="fa-solid fa-handshake"></i> SPONSORS</a>
-      <a href="volunteer.html"><i class="fa-solid fa-hand-holding-heart"></i> VOLUNTEER</a>
+      <a href="2026-event-details.html" class="active"><i class="fa-solid fa-calendar-days"></i> EVENT DETAILS</a>
       <a href="contact.html"><i class="fa-solid fa-envelope"></i> CONTACT</a>
       <a href="faq.html"><i class="fa-solid fa-circle-question"></i> FAQ</a>
     </nav>

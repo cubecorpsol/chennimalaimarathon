@@ -2,75 +2,78 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-# --- AI / LLM training & scraping crawlers ---
-# These directives are honored only by well-behaved crawlers; they are not an
-# access-control mechanism. Real protection against scraping/data-harvesting
-# is enforced server-side (CORS allowlist, no bulk-data endpoints, no PII in
-# public responses), not by this file.
+# --- AI / LLM search & assistant crawlers ---
+# Explicitly allowed so AI-powered search and answer engines (Gemini/Google AI
+# Overviews, Claude, ChatGPT/Bing Copilot, Perplexity, etc.) can crawl and cite
+# this site — e.g. for "who is the founder of Chennimalai Marathon" style
+# queries, answered from the Organization/Person structured data below.
 User-agent: GPTBot
-Disallow: /
+Allow: /
 
 User-agent: ChatGPT-User
-Disallow: /
+Allow: /
 
 User-agent: OAI-SearchBot
-Disallow: /
+Allow: /
 
 User-agent: ClaudeBot
-Disallow: /
+Allow: /
 
 User-agent: Claude-Web
-Disallow: /
+Allow: /
 
 User-agent: anthropic-ai
-Disallow: /
+Allow: /
 
 User-agent: CCBot
-Disallow: /
+Allow: /
 
 User-agent: Google-Extended
-Disallow: /
+Allow: /
 
 User-agent: Applebot-Extended
-Disallow: /
-
-User-agent: Bytespider
-Disallow: /
+Allow: /
 
 User-agent: PerplexityBot
-Disallow: /
+Allow: /
 
 User-agent: Perplexity-User
-Disallow: /
+Allow: /
+
+User-agent: Bingbot
+Allow: /
 
 User-agent: Amazonbot
-Disallow: /
-
-User-agent: Diffbot
-Disallow: /
-
-User-agent: ImagesiftBot
-Disallow: /
-
-User-agent: Omgilibot
-Disallow: /
-
-User-agent: Omgili
-Disallow: /
-
-User-agent: Timpibot
-Disallow: /
-
-User-agent: YouBot
-Disallow: /
+Allow: /
 
 User-agent: cohere-ai
-Disallow: /
+Allow: /
 
 User-agent: meta-externalagent
-Disallow: /
+Allow: /
 
 User-agent: FacebookBot
-Disallow: /
+Allow: /
+
+User-agent: Diffbot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: ImagesiftBot
+Allow: /
+
+User-agent: Omgilibot
+Allow: /
+
+User-agent: Omgili
+Allow: /
+
+User-agent: Timpibot
+Allow: /
+
+User-agent: YouBot
+Allow: /
 
 Sitemap: https://www.chennimalaimarathon.com/sitemap.xml

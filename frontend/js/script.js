@@ -1731,7 +1731,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!data.success || !data.sponsors || !data.sponsors.length) {
           container.innerHTML = `
             <div class="sponsors-empty-inline">
-              <p>Sponsorship opportunities are open. Be our early partner and get featured here.</p>
+              <p>We're grateful to everyone who supports Chennimalai Marathon.</p>
             </div>
           `;
           return;
@@ -2438,57 +2438,44 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /* ============================================================
-   Volunteer Promo Modal (index.html)
+   Marathon Photos Promo Modal (index.html)
    Shown once per browser session, shortly after the home page
-   loads, pointing visitors to the volunteer sign-up page.
+   loads, pointing visitors to the official race-day photo gallery.
    ============================================================ */
 document.addEventListener('DOMContentLoaded', function () {
-  var promoOverlay = document.getElementById('volunteerPromoOverlay');
-  if (!promoOverlay) return; // Not on the home page — nothing to do.
+  var photosOverlay = document.getElementById('photosPromoOverlay');
+  if (!photosOverlay) return; // Not on the home page — nothing to do.
 
-  var promoDismiss = document.getElementById('volunteerPromoDismiss');
-  var promoLater = document.getElementById('volunteerPromoLater');
-  var promoCta = document.getElementById('volunteerPromoCta');
-  var STORAGE_KEY = 'volunteerPromoShown';
+  var photosDismiss = document.getElementById('photosPromoDismiss');
+  var photosLater = document.getElementById('photosPromoLater');
+  var photosCta = document.getElementById('photosPromoCta');
+  var PHOTOS_STORAGE_KEY = 'photosPromoShown';
 
-  var isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-  var BACKEND_URL = isLocal ? "http://localhost:3000" : "";
-
-  function markShown() {
-    try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
+  function markPhotosShown() {
+    try { sessionStorage.setItem(PHOTOS_STORAGE_KEY, '1'); } catch (e) { /* private browsing — ignore */ }
   }
 
-  function closePromo() {
-    promoOverlay.classList.remove('open');
-    markShown();
+  function closePhotosPromo() {
+    photosOverlay.classList.remove('open');
+    markPhotosShown();
   }
 
-  function openPromo() {
+  function openPhotosPromo() {
     var alreadyShown = false;
-    try { alreadyShown = !!sessionStorage.getItem(STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
+    try { alreadyShown = !!sessionStorage.getItem(PHOTOS_STORAGE_KEY); } catch (e) { /* private browsing — ignore */ }
     if (alreadyShown) return;
-    promoOverlay.classList.add('open');
+    photosOverlay.classList.add('open');
   }
 
-  if (promoDismiss) promoDismiss.addEventListener('click', closePromo);
-  if (promoLater) promoLater.addEventListener('click', closePromo);
-  if (promoCta) promoCta.addEventListener('click', markShown);
-  promoOverlay.addEventListener('click', function (e) {
-    if (e.target === promoOverlay) closePromo();
+  if (photosDismiss) photosDismiss.addEventListener('click', closePhotosPromo);
+  if (photosLater) photosLater.addEventListener('click', closePhotosPromo);
+  if (photosCta) photosCta.addEventListener('click', markPhotosShown);
+  photosOverlay.addEventListener('click', function (e) {
+    if (e.target === photosOverlay) closePhotosPromo();
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && promoOverlay.classList.contains('open')) closePromo();
+    if (e.key === 'Escape' && photosOverlay.classList.contains('open')) closePhotosPromo();
   });
 
-  // Popup visibility is controlled from the admin Settings page —
-  // only schedule it once we know it's enabled.
-  fetch(BACKEND_URL + "/api/status")
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      if (data.volunteerPromoEnabled === false) return;
-      setTimeout(openPromo, 1200);
-    })
-    .catch(function (err) {
-      console.warn("Volunteer promo status check error:", err);
-    });
+  setTimeout(openPhotosPromo, 1200);
 });
